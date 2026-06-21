@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Arcade Casino</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header">
+        <div class="balance-badge">
+            <span>⭐</span>
+            <span id="balance">0</span>
+        </div>
+        <img id="avatar" class="avatar" src="" alt="">
+    </div>
+
+    <div id="page-home" class="page active">
+        <div class="page-title">Пополнение баланса</div>
+        <div class="card">
+            <div class="card-icon">💎</div>
+            <p class="card-text">Покупка звёзд через TON</p>
+            <p class="card-sub">1 ⭐ = 0.006 TON</p>
+        </div>
+        <input type="number" id="amount-input" placeholder="Сколько звёзд?">
+        <div class="quick-amounts">
+            <button onclick="setAmount(50)">50</button>
+            <button onclick="setAmount(100)">100</button>
+            <button onclick="setAmount(250)">250</button>
+            <button onclick="setAmount(500)">500</button>
+            <button onclick="setAmount(1000)">1000</button>
+        </div>
+        <button class="btn-gold" onclick="buyStars()">Купить ⭐</button>
+    </div>
+
+    <div id="page-cases" class="page">
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('free')">🎁 Бесплатные</button>
+            <button class="tab" onclick="switchTab('cheap')">💸 Дешёвые</button>
+            <button class="tab" onclick="switchTab('rich')">👑 Богатые</button>
+        </div>
+        <div id="tab-free" class="tab-content active">
+            <div class="case-card" onclick="showCase('daily')">
+                <div class="case-icon">📅</div>
+                <div class="case-info"><div class="case-name">Ежедневный</div><div class="case-price free">БЕСПЛАТНО</div></div>
+                <div class="case-arrow">›</div>
+            </div>
+        </div>
+        <div id="tab-cheap" class="tab-content">
+            <div class="case-card" onclick="showCase('bum')">
+                <div class="case-icon">📦</div>
+                <div class="case-info"><div class="case-name">Бомж</div><div class="case-price">5 ⭐</div></div>
+                <div class="case-arrow">›</div>
+            </div>
+            <div class="case-card" onclick="showCase('medium')">
+                <div class="case-icon">🎀</div>
+                <div class="case-info"><div class="case-name">Среднячок</div><div class="case-price">50 ⭐</div></div>
+                <div class="case-arrow">›</div>
+            </div>
+        </div>
+        <div id="tab-rich" class="tab-content">
+            <div class="case-card" onclick="showCase('major')">
+                <div class="case-icon">💎</div>
+                <div class="case-info"><div class="case-name">Мажор</div><div class="case-price">350 ⭐</div></div>
+                <div class="case-arrow">›</div>
+            </div>
+            <div class="case-card" onclick="showCase('allornothing')">
+                <div class="case-icon">🎰</div>
+                <div class="case-info"><div class="case-name">Всё или ничего</div><div class="case-price">500 ⭐</div></div>
+                <div class="case-arrow">›</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-detail" class="page">
+        <div class="back-btn" onclick="goPage('cases')">← Назад</div>
+        <div id="detail-content"></div>
+    </div>
+
+    <div id="page-opening" class="page fullscreen">
+        <div class="close-btn" onclick="goPage('cases')">✕</div>
+        <div class="opening-container">
+            <div id="spinner" class="spinner"></div>
+            <div id="result" style="display:none;">
+                <div id="result-icon"></div>
+                <div id="result-text"></div>
+                <button class="btn-gold" onclick="goPage('cases')">Забрать!</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-withdraw" class="page">
+        <div class="page-title">Вывод звёзд</div>
+        <div class="card"><p>Минимум: <b>100 ⭐</b></p></div>
+        <input type="number" id="wd-amount" placeholder="Сколько вывести?">
+        <input type="text" id="wd-card" placeholder="Номер карты">
+        <button class="btn-gold" onclick="withdraw()">Вывести 💳</button>
+    </div>
+
+    <div class="bottom-nav">
+        <button class="nav-btn active" onclick="goPage('home')">🏠</button>
+        <button class="nav-btn" onclick="goPage('cases')">📦</button>
+        <button class="nav-btn" onclick="goPage('withdraw')">⭐</button>
+    </div>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="app.js"></script>
+</body>
+          </html>
