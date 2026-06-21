@@ -17,7 +17,7 @@ BOT_USERNAME = "arcadecasinobot"
 OWNER_ID = 8131755675
 TON_WALLET = "UQAhap1bl6g49QgjYoK2H43k0GeB5xtd9JSCJzDYLy6QgJv4"
 STAR_PRICE_TON = 0.006
-WEBAPP_URL = "https://ТВОЙ_URL.railway.app"
+WEBAPP_URL = "arcade-production-4354.up.railway.app"
 DB_NAME = "arcade.db"
 
 # ==================== БАЗА ДАННЫХ ====================
