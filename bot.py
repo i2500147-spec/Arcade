@@ -2,6 +2,8 @@ import asyncio
 import logging
 import json
 from datetime import datetime
+from threading import Thread
+from flask import Flask, send_from_directory
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, MenuButtonWebApp
@@ -10,6 +12,7 @@ from aiogram.client.default import DefaultBotProperties
 import aiosqlite
 import aiohttp
 import random
+import os
 
 # ==================== НАСТРОЙКИ ====================
 BOT_TOKEN = "8965870385:AAHZ_zppdEcBPIVl2DIdgNwds4z-BqYfv5A"
@@ -17,8 +20,22 @@ BOT_USERNAME = "arcadecasinobot"
 OWNER_ID = 8131755675
 TON_WALLET = "UQAhap1bl6g49QgjYoK2H43k0GeB5xtd9JSCJzDYLy6QgJv4"
 STAR_PRICE_TON = 0.006
-WEBAPP_URL = "arcade-production-4354.up.railway.app"
+WEBAPP_URL = "https://arcade-production-4354.up.railway.app"
 DB_NAME = "arcade.db"
+
+# ==================== FLASK ====================
+flask_app = Flask(__name__, static_folder='webapp')
+
+@flask_app.route('/')
+def home():
+    return send_from_directory('webapp', 'index.html')
+
+@flask_app.route('/<path:path>')
+def static_files(path):
+    return send_from_directory('webapp', path)
+
+def run_flask():
+    flask_app.run(host='0.0.0.0', port=8000)
 
 # ==================== БАЗА ДАННЫХ ====================
 async def init_db():
@@ -43,7 +60,7 @@ async def init_db():
             tx_hash TEXT PRIMARY KEY)''')
         await db.commit()
 
-# ==================== TON ПРОВЕРКА ====================
+# ==================== TON ====================
 async def check_ton():
     url = f"https://toncenter.com/api/v2/getTransactions?address={TON_WALLET}&limit=10"
     try:
@@ -73,7 +90,6 @@ async def process_ton(bot: Bot):
                         continue
                     
                     val = int(msg.get("value", 0)) / 1_000_000_000
-                    comm = msg.get("message", "")
                     
                     if val <= 0.001:
                         continue
@@ -91,16 +107,11 @@ async def process_ton(bot: Bot):
                         await db.commit()
                         
                         try:
-                            await bot.send_message(
-                                dep[1],
-                                f"✅ <b>+{dep[2]} ⭐ зачислено!</b>\n💎 Автоматически\n🔗 <a href='https://tonviewer.com/transaction/{tx_hash}'>Транзакция</a>",
-                                parse_mode=ParseMode.HTML,
-                                disable_web_page_preview=True
-                            )
+                            await bot.send_message(dep[1], f"✅ +{dep[2]} ⭐ зачислено!", parse_mode=ParseMode.HTML)
                         except:
                             pass
-        except Exception as e:
-            print(f"TON error: {e}")
+        except:
+            pass
         await asyncio.sleep(30)
 
 # ==================== ФУНКЦИИ ====================
@@ -160,10 +171,6 @@ async def open_case(uid: int, case: str) -> str:
         cur += ch
         if rnd <= cur:
             await add_balance(uid, val)
-            async with aiosqlite.connect(DB_NAME) as db:
-                await db.execute("INSERT INTO cases_opened (user_id, case_name, reward, reward_value) VALUES (?,?,?,?)",
-                                (uid, case, name, val))
-                await db.commit()
             new_bal = await get_balance(uid)
             return f"🎉 <b>{name}</b>\n💰 +{val} ⭐\n💎 Баланс: {new_bal} ⭐"
     return "❌ Ошибка"
@@ -185,17 +192,10 @@ async def start_cmd(message: types.Message, bot: Bot):
         await db.execute("INSERT OR IGNORE INTO users (user_id, username, first_name) VALUES (?,?,?)", (uid, uname, fn))
         await db.commit()
     
-    await bot.set_chat_menu_button(
-        chat_id=uid,
-        menu_button=MenuButtonWebApp(text="🎮 Играть", web_app=WebAppInfo(url=WEBAPP_URL))
-    )
+    await bot.set_chat_menu_button(chat_id=uid, menu_button=MenuButtonWebApp(text="🎮 Играть", web_app=WebAppInfo(url=WEBAPP_URL)))
     
     await message.answer(
-        f"🎰 <b>Arcade Casino</b>\n\n"
-        f"💫 Открывай кейсы и выигрывай!\n"
-        f"💰 1 ⭐ = {STAR_PRICE_TON} TON\n"
-        f"💎 Пополнение через TON\n\n"
-        f"👇 Жми кнопку:",
+        f"🎰 <b>Arcade Casino</b>\n\n💫 Открывай кейсы и выигрывай!\n💰 1 ⭐ = {STAR_PRICE_TON} TON\n\n👇 Жми:",
         reply_markup=main_kb(),
         parse_mode=ParseMode.HTML
     )
@@ -215,25 +215,15 @@ async def webapp(message: types.Message, bot: Bot):
         comm = f"BUY_{uid}_{int(datetime.now().timestamp())}"
         
         async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute(
-                "INSERT INTO deposits (user_id, amount_ton, amount_stars, expected_amount, comment) VALUES (?,?,?,?,?)",
-                (uid, ton, stars, ton, comm)
-            )
+            await db.execute("INSERT INTO deposits (user_id, amount_ton, amount_stars, expected_amount, comment) VALUES (?,?,?,?,?)",
+                            (uid, ton, stars, ton, comm))
             await db.commit()
         
         link = f"ton://transfer/{TON_WALLET}?amount={ton}&text={comm}"
         
         await message.answer(
-            f"💎 <b>Покупка {stars} ⭐</b>\n\n"
-            f"💳 Сумма: <b>{ton} TON</b>\n"
-            f"📊 Курс: 1 ⭐ = {STAR_PRICE_TON} TON\n\n"
-            f"📤 Отправьте <b>ровно {ton} TON</b>:\n"
-            f"<code>{TON_WALLET}</code>\n\n"
-            f"💬 Комментарий: <code>{comm}</code>\n\n"
-            f"🔗 <a href='{link}'>Быстрая оплата</a>\n\n"
-            f"⚡ Звёзды зачислятся автоматически!",
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True
+            f"💎 <b>Покупка {stars} ⭐</b>\n\n💳 Сумма: <b>{ton} TON</b>\n\n📤 Кошелёк:\n<code>{TON_WALLET}</code>\n\n💬 Коммент: <code>{comm}</code>\n\n🔗 <a href='{link}'>Быстрая оплата</a>\n\n⚡ Автозачисление!",
+            parse_mode=ParseMode.HTML
         )
     
     elif act == "withdraw":
@@ -242,27 +232,19 @@ async def webapp(message: types.Message, bot: Bot):
         bal = await get_balance(uid)
         
         if stars < 100:
-            await message.answer("❌ Минимум: 100 ⭐")
-            return
+            await message.answer("❌ Минимум: 100 ⭐"); return
         if stars > bal:
-            await message.answer(f"❌ Баланс: {bal} ⭐")
-            return
+            await message.answer(f"❌ Баланс: {bal} ⭐"); return
         
         ton = round(stars * STAR_PRICE_TON * 0.9, 4)
         
         async with aiosqlite.connect(DB_NAME) as db:
             await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (stars, uid))
-            await db.execute(
-                "INSERT INTO withdrawals (user_id, amount_stars, amount_ton, card_number) VALUES (?,?,?,?)",
-                (uid, stars, ton, card)
-            )
+            await db.execute("INSERT INTO withdrawals (user_id, amount_stars, amount_ton, card_number) VALUES (?,?,?,?)",
+                            (uid, stars, ton, card))
             await db.commit()
         
-        await bot.send_message(
-            OWNER_ID,
-            f"📤 <b>Вывод</b>\n👤 ID: {uid}\n💎 {stars} ⭐\n💎 {ton} TON\n💳 {card}",
-            parse_mode=ParseMode.HTML
-        )
+        await bot.send_message(OWNER_ID, f"📤 Вывод\n👤 {uid}\n💎 {stars} ⭐\n💎 {ton} TON\n💳 {card}")
         await message.answer(f"✅ Заявка создана!\n💎 {ton} TON на карту")
     
     elif act == "open_case":
@@ -275,6 +257,9 @@ async def main():
     logging.basicConfig(level=logging.INFO)
     await init_db()
     print("✅ База готова")
+    
+    Thread(target=run_flask, daemon=True).start()
+    print("🌐 WebApp на порту 8000")
     
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
