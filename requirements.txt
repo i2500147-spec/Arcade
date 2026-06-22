@@ -1,4 +1,1 @@
-aiogram
-aiosqlite
-aiohttp
 flask
