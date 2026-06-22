@@ -7,6 +7,14 @@ from threading import Thread
 from flask import Flask, send_from_directory, request, jsonify
 import aiosqlite
 import aiohttp
+import sys
+import traceback
+
+def log_error(exc_type, exc_value, exc_tb):
+    print("ERROR:", exc_type.__name__, exc_value)
+    traceback.print_exception(exc_type, exc_value, exc_tb)
+
+sys.excepthook = log_error
 
 BOT_TOKEN = "8941049801:AAFQHjVBXnx_58ndwkskRTwEam0g5ZaZcb0"
 BOT_USERNAME = "arcadecasinobot"
@@ -341,3 +349,27 @@ async def process_update(data):
 async def init_db():
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, balance INTEGER DEFAULT 0, ref_code TEXT UNIQUE, invited_by INTEGER, ref_earned INTEGER DEFAULT 0, last_daily TEXT, last_allornothing TEXT)")
+
+def set_webhook():
+    import requests
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={WEBAPP_URL}/webhook"
+    r = requests.get(url)
+    print(f"Webhook: {r.json()}")
+
+def run_flask():
+    port = int(os.environ.get('PORT', 8000))
+    flask_app.run(host='0.0.0.0', port=port)
+
+if __name__ == "__main__":
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(init_db())
+        print("DB OK")
+        set_webhook()
+        Thread(target=run_flask, daemon=True).start()
+        print("Flask started")
+        import time
+        while True:
+            time.sleep(60)
+    except Exception as e:
+        print(f"FATAL: {e}")
