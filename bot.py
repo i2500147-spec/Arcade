@@ -340,4 +340,4 @@ async def process_update(data):
 
 async def init_db():
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute("CREATE TABLE IF NOT EXISTS use
+        await db.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, balance INTEGER DEFAULT 0, ref_code TEXT UNIQUE, invited_by INTEGER, ref_earned INTEGER DEFAULT 0, last_daily TEXT, last_allornothing TEXT)")
