@@ -1,3 +1,9 @@
+import os
+if os.environ.get('BOT_RUNNING'):
+    print("Bot already running, exiting")
+    import sys
+    sys.exit(0)
+os.environ['BOT_RUNNING'] = '1'
 import asyncio
 import logging
 import json
