@@ -1,5 +1,5 @@
 const tg = window.Telegram.WebApp;
-tg.expand();
+tg.expand(); 
 tg.ready();
 
 let userId = 0;
