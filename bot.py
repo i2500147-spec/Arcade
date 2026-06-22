@@ -12,13 +12,14 @@ from aiogram.client.default import DefaultBotProperties
 import aiosqlite
 import aiohttp
 import random
-import os
 
 # ==================== НАСТРОЙКИ ====================
 BOT_TOKEN = "8965870385:AAHZ_zppdEcBPIVl2DIdgNwds4z-BqYfv5A"
 BOT_USERNAME = "arcadecasinobot"
+CHANNEL_USERNAME = "@arcadeludo"
+CHANNEL_TAG = "arcadeludo"
 OWNER_ID = 8131755675
-TON_WALLET = "UQAhap1bl6g49QgjYoK2H43k0GeB5xtd9JSCJzDYLy6QgJv4"
+TON_WALLET = "UQAISFpye-QozqPlK1iX_qHPmYzEphSNalQsFojALxuLXpx6"
 STAR_PRICE_TON = 0.006
 WEBAPP_URL = "https://arcade-production-4354.up.railway.app"
 DB_NAME = "arcade.db"
@@ -50,8 +51,8 @@ async def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
         await db.execute('''CREATE TABLE IF NOT EXISTS withdrawals (
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
-            amount_stars INTEGER, amount_ton REAL, card_number TEXT,
-            status TEXT DEFAULT 'pending', timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+            amount_stars INTEGER, status TEXT DEFAULT 'pending',
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
         await db.execute('''CREATE TABLE IF NOT EXISTS cases_opened (
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
             case_name TEXT, reward TEXT, reward_value INTEGER,
@@ -59,6 +60,14 @@ async def init_db():
         await db.execute('''CREATE TABLE IF NOT EXISTS processed_tx (
             tx_hash TEXT PRIMARY KEY)''')
         await db.commit()
+
+# ==================== ПРОВЕРКА ПОДПИСКИ ====================
+async def check_sub(bot: Bot, uid: int) -> bool:
+    try:
+        member = await bot.get_chat_member(f"@{CHANNEL_TAG}", uid)
+        return member.status not in ['left', 'kicked']
+    except:
+        return False
 
 # ==================== TON ====================
 async def check_ton():
@@ -107,7 +116,7 @@ async def process_ton(bot: Bot):
                         await db.commit()
                         
                         try:
-                            await bot.send_message(dep[1], f"✅ +{dep[2]} ⭐ зачислено!", parse_mode=ParseMode.HTML)
+                            await bot.send_message(dep[1], f"✅ <b>+{dep[2]} ⭐ зачислено!</b>", parse_mode=ParseMode.HTML)
                         except:
                             pass
         except:
@@ -126,42 +135,46 @@ async def add_balance(uid: int, amt: int):
         await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (amt, uid))
         await db.commit()
 
-async def open_case(uid: int, case: str) -> str:
+async def open_case(uid: int, case: str, bot: Bot) -> str:
     cases = {
         "daily": {"price": 0, "items": [
-            ("⭐ 15", 15, 60), ("⭐ 30", 30, 20), ("⭐ 50", 50, 18), ("⭐ 100", 100, 2)
+            ("15 ⭐", 15, 60), ("30 ⭐", 30, 20), ("50 ⭐", 50, 18), ("100 ⭐", 100, 2)
         ]},
         "bum": {"price": 5, "items": [
-            ("⭐ 1", 1, 10), ("⭐ 5", 5, 60), ("⭐ 20", 20, 15), ("⭐ 50", 50, 10), ("⭐ 150", 150, 5)
+            ("1 ⭐", 1, 10), ("5 ⭐", 5, 60), ("20 ⭐", 20, 15), ("50 ⭐", 50, 10), ("150 ⭐", 150, 5)
         ]},
         "medium": {"price": 50, "items": [
-            ("🌹 Роза", 25, 25), ("🎂 Торт", 50, 30), ("💍 Кольцо", 100, 44), ("🍦 Нфт Мороженое", 500, 1)
+            ("Роза", 25, 25), ("Торт", 50, 30), ("Кольцо", 100, 44), ("Нфт Мороженое", 500, 1)
         ]},
         "major": {"price": 350, "items": [
-            ("🐕 Нфт Снуп дог", 1300, 10), ("🔥 Нфт Факел", 450, 40), ("🧸 Мишка", 15, 30), ("🍦 Нфт Мороженое", 420, 10)
+            ("Нфт Снуп дог", 1300, 10), ("Нфт Факел", 450, 40), ("Мишка", 15, 30), ("Нфт Мороженое", 420, 10)
         ]},
         "allornothing": {"price": 500, "items": [
-            ("🧸 Мишка", 15, 30), ("🌹 Роза", 25, 40), ("💎 5000 ⭐", 5000, 25), ("👑 Премиум 3 мес", 900, 5)
+            ("Мишка", 15, 30), ("Роза", 25, 40), ("5000 ⭐", 5000, 25), ("Премиум 3 мес", 900, 5)
         ]}
     }
     
     c = cases.get(case)
     if not c:
-        return "❌ Кейс не найден"
+        return "case:error,case_not_found"
     
     if case == "daily":
+        subbed = await check_sub(bot, uid)
+        if not subbed:
+            return "case:error,not_subscribed"
+        
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT last_daily FROM users WHERE user_id=?", (uid,))
             r = await cur.fetchone()
             if r and r[0] == datetime.now().strftime("%Y-%m-%d"):
-                return "❌ Уже открывали сегодня!"
+                return "case:error,already_opened"
             await db.execute("UPDATE users SET last_daily=? WHERE user_id=?", (datetime.now().strftime("%Y-%m-%d"), uid))
             await db.commit()
     
     if c["price"] > 0:
         bal = await get_balance(uid)
         if bal < c["price"]:
-            return f"❌ Недостаточно! Нужно {c['price']} ⭐, у вас {bal} ⭐"
+            return "case:error,no_balance"
         await add_balance(uid, -c["price"])
     
     total = sum(it[2] for it in c["items"])
@@ -171,9 +184,13 @@ async def open_case(uid: int, case: str) -> str:
         cur += ch
         if rnd <= cur:
             await add_balance(uid, val)
+            async with aiosqlite.connect(DB_NAME) as db:
+                await db.execute("INSERT INTO cases_opened (user_id, case_name, reward, reward_value) VALUES (?,?,?,?)",
+                                (uid, case, name, val))
+                await db.commit()
             new_bal = await get_balance(uid)
-            return f"🎉 <b>{name}</b>\n💰 +{val} ⭐\n💎 Баланс: {new_bal} ⭐"
-    return "❌ Ошибка"
+            return f"case:success,{name},{val},{new_bal}"
+    return "case:error,unknown"
 
 # ==================== КЛАВИАТУРА ====================
 def main_kb():
@@ -207,7 +224,11 @@ async def webapp(message: types.Message, bot: Bot):
     
     if act == "get_balance":
         bal = await get_balance(uid)
-        await message.answer(f"💰 Баланс: {bal} ⭐")
+        await message.answer(f"balance:{bal}")
+    
+    elif act == "check_sub":
+        subbed = await check_sub(bot, uid)
+        await message.answer(f"sub:{subbed}")
     
     elif act == "pay":
         stars = data.get("amount", 0)
@@ -228,29 +249,32 @@ async def webapp(message: types.Message, bot: Bot):
     
     elif act == "withdraw":
         stars = data.get("amount", 0)
-        card = data.get("card", "")
         bal = await get_balance(uid)
         
         if stars < 100:
-            await message.answer("❌ Минимум: 100 ⭐"); return
+            await message.answer("withdraw:min")
+            return
         if stars > bal:
-            await message.answer(f"❌ Баланс: {bal} ⭐"); return
-        
-        ton = round(stars * STAR_PRICE_TON * 0.9, 4)
+            await message.answer("withdraw:no_balance")
+            return
         
         async with aiosqlite.connect(DB_NAME) as db:
             await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (stars, uid))
-            await db.execute("INSERT INTO withdrawals (user_id, amount_stars, amount_ton, card_number) VALUES (?,?,?,?)",
-                            (uid, stars, ton, card))
+            await db.execute("INSERT INTO withdrawals (user_id, amount_stars) VALUES (?,?)", (uid, stars))
             await db.commit()
         
-        await bot.send_message(OWNER_ID, f"📤 Вывод\n👤 {uid}\n💎 {stars} ⭐\n💎 {ton} TON\n💳 {card}")
-        await message.answer(f"✅ Заявка создана!\n💎 {ton} TON на карту")
+        user_mention = f"@{message.from_user.username}" if message.from_user.username else f"ID:{uid}"
+        await bot.send_message(
+            OWNER_ID,
+            f"📤 <b>Заявка на вывод!</b>\n\n👤 {user_mention}\n🆔 {uid}\n💎 <b>{stars} ⭐</b>\n📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}",
+            parse_mode=ParseMode.HTML
+        )
+        await message.answer("withdraw:ok")
     
     elif act == "open_case":
         case = data.get("case", "")
-        result = await open_case(uid, case)
-        await message.answer(result, parse_mode=ParseMode.HTML)
+        result = await open_case(uid, case, bot)
+        await message.answer(result)
 
 # ==================== ЗАПУСК ====================
 async def main():
