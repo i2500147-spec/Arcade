@@ -210,8 +210,7 @@ async def process_update(data):
                             await db.execute("UPDATE users SET ref_code=? WHERE user_id=?", (code, uid))
                             await db.commit()
                     await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
-                        "chat_id": chat_id,
-                        "text": f"ref:{code}"
+                        "chat_id": chat_id, "text": f"ref:{code}"
                     })
                 
                 elif act == "pay":
@@ -341,4 +340,4 @@ async def process_update(data):
 
 async def init_db():
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('''CREATE TABLE IF NOT EXISTS inventory ...
+        await db.execute("CREATE TABLE IF NOT EXISTS use
