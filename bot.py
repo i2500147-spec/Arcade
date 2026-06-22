@@ -341,4 +341,4 @@ async def process_update(data):
 
 async def init_db():
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('''CREA
+        await db.execute('''CREATE TABLE IF NOT EXISTS inventory ...
