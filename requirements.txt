@@ -1,1 +1,4 @@
+aiogram
+aiosqlite
+aiohttp
 flask
