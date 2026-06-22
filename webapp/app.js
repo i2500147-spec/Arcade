@@ -19,14 +19,12 @@ let openingCase = false;
 
 const API = 'https://arcade-production-4354.up.railway.app/api';
 
-// Инициализация
 const initData = tg.initDataUnsafe;
 if (initData.user) {
     userId = initData.user.id;
     loadUserData();
 }
 
-// Загрузка данных
 async function loadUserData() {
     try {
         const res = await fetch(`${API}/user/${userId}`);
@@ -60,11 +58,6 @@ function goPage(page) {
     if (page === 'leaderboard') loadLeaderboard();
     if (page === 'inventory') loadInventory();
     if (page === 'shop') loadShop();
-    if (page === 'ref') updateRefUI();
-}
-
-function updateRefUI() {
-    document.getElementById('copy-btn').textContent = refCode ? '📋 Копировать ссылку' : 'Загрузка...';
 }
 
 function copyRef() {
@@ -91,10 +84,7 @@ function connectWallet() {
 
 function deposit() {
     const amount = parseInt(document.getElementById('dep-amount').value);
-    if (!amount || amount < 1) {
-        tg.showAlert('Введите сумму!');
-        return;
-    }
+    if (!amount || amount < 1) { tg.showAlert('Введите сумму!'); return; }
     tg.sendData(JSON.stringify({ action: 'pay', amount: amount }));
     tg.showAlert('Счёт открыт в Telegram!');
     closeDeposit();
@@ -102,7 +92,6 @@ function deposit() {
 
 // Краш
 function openCrash() {
-    goPage('crash');
     document.getElementById('page-crash').classList.add('active');
     document.getElementById('crash-mult').textContent = '1.00x';
     document.getElementById('crash-cashout').disabled = true;
@@ -110,16 +99,9 @@ function openCrash() {
 
 function startCrash() {
     if (crashActive) return;
-    
     const bet = parseInt(document.getElementById('crash-bet').value);
-    if (!bet || bet < 1) {
-        tg.showAlert('Введите ставку!');
-        return;
-    }
-    if (bet > userBalance) {
-        tg.showAlert('Недостаточно звёзд!');
-        return;
-    }
+    if (!bet || bet < 1) { tg.showAlert('Введите ставку!'); return; }
+    if (bet > userBalance) { tg.showAlert('Недостаточно звёзд!'); return; }
     
     crashBet = bet;
     crashMultiplier = 1;
@@ -133,10 +115,7 @@ function startCrash() {
     crashInterval = setInterval(() => {
         crashMultiplier += 0.05;
         document.getElementById('crash-mult').textContent = crashMultiplier.toFixed(2) + 'x';
-        
-        if (Math.random() < 0.02 * crashMultiplier) {
-            endCrash(false);
-        }
+        if (Math.random() < 0.02 * crashMultiplier) endCrash(false);
     }, 200);
 }
 
@@ -163,10 +142,7 @@ function endCrash(won) {
 }
 
 function closeGame() {
-    if (crashActive) {
-        tg.showAlert('Дождитесь конца игры!');
-        return;
-    }
+    if (crashActive) { tg.showAlert('Дождитесь конца игры!'); return; }
     document.getElementById('page-crash').classList.remove('active');
     document.getElementById('page-slots').classList.remove('active');
     goPage('home');
@@ -174,7 +150,6 @@ function closeGame() {
 
 // Слоты
 function openSlots() {
-    goPage('slots');
     document.getElementById('page-slots').classList.add('active');
 }
 
@@ -182,7 +157,6 @@ function switchSlot(type) {
     currentSlot = type;
     document.querySelectorAll('.slot-tab').forEach(t => t.classList.remove('active'));
     event.target.classList.add('active');
-    
     const colors = { novice: '#2d7dd2', start: '#c0392b', major: '#d4a843' };
     document.getElementById('slot-reels').style.borderColor = colors[type];
 }
@@ -197,30 +171,27 @@ function spinSlots() {
     const prices = { novice: 3, start: 10, major: 305 };
     const price = prices[currentSlot] * slotMult;
     
-    if (price > userBalance) {
-        tg.showAlert('Недостаточно звёзд!');
-        return;
-    }
+    if (price > userBalance) { tg.showAlert('Недостаточно звёзд!'); return; }
     
     userBalance -= price;
     updateUI();
     
     const items = {
-        novice: ['⭐1', '⭐3', '⭐5', '⭐10', '⭐305'],
-        start: ['⭐1', '⭐2', '⭐3', '⭐5', '⭐10', '⭐25', '🔥305', '💎500'],
-        major: ['🔥305', '💎800']
+        novice: ['1⭐', '3⭐', '5⭐', '10⭐', '305⭐'],
+        start: ['1⭐', '2⭐', '3⭐', '5⭐', '10⭐', '25⭐', '🔥', '💎'],
+        major: ['🔥', '💎']
     };
     
     const reels = [document.getElementById('reel1'), document.getElementById('reel2'), document.getElementById('reel3')];
-    let spinCount = 0;
+    let count = 0;
     
     const spin = setInterval(() => {
         reels.forEach(reel => {
             reel.textContent = items[currentSlot][Math.floor(Math.random() * items[currentSlot].length)];
         });
-        spinCount++;
+        count++;
         
-        if (spinCount > 30) {
+        if (count > 30) {
             clearInterval(spin);
             const result = items[currentSlot][Math.floor(Math.random() * items[currentSlot].length)];
             const val = parseInt(result.replace(/[^0-9]/g, '')) || 0;
@@ -235,34 +206,44 @@ function spinSlots() {
 function openFreeCase() {
     if (openingCase) return;
     openingCase = true;
+    openCaseAnimation();
     tg.sendData(JSON.stringify({ action: 'open_case', case: 'daily' }));
 }
 
 function openCase(name) {
     if (openingCase) return;
     openingCase = true;
+    openCaseAnimation();
+    tg.sendData(JSON.stringify({ action: 'open_case', case: name }));
+}
+
+function openCaseAnimation() {
+    document.getElementById('page-case-open').classList.add('active');
+    document.getElementById('case-result-block').style.display = 'none';
     
-    document.getElementById('page-cases').classList.add('active');
-    document.getElementById('case-title').textContent = name;
-    
-    const reel = document.getElementById('creel1');
-    const icons = ['🎁', '💎', '⭐', '💫', '🔥', '💰', '👑', '💍'];
+    const reel = document.getElementById('case-reel');
+    const icons = ['📦', '💎', '⭐', '💫', '🔥', '💰', '👑', '💍', '🎁'];
     let count = 0;
     
     const spin = setInterval(() => {
         reel.textContent = icons[Math.floor(Math.random() * icons.length)];
-        reel.style.transform = `translateX(${Math.random() * 20 - 10}px)`;
+        reel.style.transform = `scale(${0.8 + Math.random() * 0.4})`;
         count++;
         
         if (count > 25) {
             clearInterval(spin);
-            reel.style.transform = 'translateX(0)';
-            tg.sendData(JSON.stringify({ action: 'open_case', case: name }));
+            reel.style.transform = 'scale(1)';
         }
     }, 80);
 }
 
-// Загрузка инвентаря
+function closeCaseOpen() {
+    if (openingCase) return;
+    document.getElementById('page-case-open').classList.remove('active');
+    goPage('home');
+}
+
+// Загрузки
 async function loadInventory() {
     const res = await fetch(`${API}/inventory/${userId}`);
     const items = await res.json();
@@ -285,20 +266,13 @@ async function loadInventory() {
 
 async function sellNFT(name, value) {
     const res = await fetch(`${API}/sell_nft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid: userId, name, value })
     });
     const data = await res.json();
-    if (data.success) {
-        userBalance = data.balance;
-        updateUI();
-        tg.showAlert('Продано!');
-        loadInventory();
-    }
+    if (data.success) { userBalance = data.balance; updateUI(); tg.showAlert('Продано!'); loadInventory(); }
 }
 
-// Магазин
 async function loadShop() {
     const res = await fetch(`${API}/shop`);
     const items = await res.json();
@@ -314,56 +288,40 @@ async function loadShop() {
 
 async function buyNFT(name, value, emoji) {
     const res = await fetch(`${API}/buy_nft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid: userId, name, value, emoji })
     });
     const data = await res.json();
-    if (data.success) {
-        userBalance = data.balance;
-        updateUI();
-        tg.showAlert('Куплено!');
-    } else {
-        tg.showAlert('Недостаточно звёзд!');
-    }
+    if (data.success) { userBalance = data.balance; updateUI(); tg.showAlert('Куплено!'); }
+    else { tg.showAlert('Недостаточно звёзд!'); }
 }
 
 // Апгрейд
 function openUpgrade() {
-    goPage('home');
     document.getElementById('page-upgrade').classList.add('active');
 }
 
-function selectFromNFT() {
-    loadInventoryForSelect('from');
+function closeUpgrade() {
+    document.getElementById('page-upgrade').classList.remove('active');
 }
 
-function selectToNFT() {
-    loadShopForSelect('to');
-}
-
-async function loadInventoryForSelect(type) {
+async function selectFromNFT() {
     const res = await fetch(`${API}/inventory/${userId}`);
     const items = await res.json();
-    const item = items[0];
-    if (item) {
-        if (type === 'from') {
-            upgradeFrom = item;
-            document.getElementById('from-nft').textContent = item.name;
-        }
+    if (items.length) {
+        upgradeFrom = items[0];
+        document.getElementById('from-nft').textContent = items[0].name;
+        updateUpgradeChance();
     }
 }
 
-async function loadShopForSelect(type) {
+async function selectToNFT() {
     const res = await fetch(`${API}/shop`);
     const items = await res.json();
-    const item = items[0];
-    if (item) {
-        if (type === 'to') {
-            upgradeTo = item;
-            document.getElementById('to-nft').textContent = item.name;
-            updateUpgradeChance();
-        }
+    if (items.length) {
+        upgradeTo = items[0];
+        document.getElementById('to-nft').textContent = items[0].name;
+        updateUpgradeChance();
     }
 }
 
@@ -376,24 +334,17 @@ function updateUpgradeChance() {
 }
 
 async function doUpgrade() {
-    if (!upgradeFrom || !upgradeTo) {
-        tg.showAlert('Выберите NFT!');
-        return;
-    }
+    if (!upgradeFrom || !upgradeTo) { tg.showAlert('Выберите NFT!'); return; }
     
     const res = await fetch(`${API}/upgrade`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid: userId, from: upgradeFrom, to: upgradeTo })
     });
     const data = await res.json();
     
-    if (data.won) {
-        tg.showAlert('🎉 Апгрейд успешен!');
-    } else {
-        tg.showAlert('❌ Неудача! NFT сгорел.');
-    }
-    goPage('home');
+    if (data.won) { tg.showAlert('🎉 Апгрейд успешен!'); }
+    else { tg.showAlert('❌ Неудача! NFT сгорел.'); }
+    closeUpgrade();
 }
 
 // Лидерборд
@@ -419,39 +370,33 @@ function maskName(name) {
     return name[0] + '***' + name[name.length-1];
 }
 
-// Обработка ответов бота
-window.addEventListener('message', function(e) {
-    try {
-        const data = JSON.parse(e.data);
-        if (data.balance !== undefined) {
-            userBalance = data.balance;
-            updateUI();
-        }
-    } catch(err) {}
-});
+function openDuel() { tg.showAlert('Дуэли скоро!'); }
 
+// Обработка ответов бота
 const origPostMessage = window.postMessage;
 window.postMessage = function(msg, origin) {
     if (typeof msg === 'string' && msg.startsWith('case:')) {
-        openingCase = false;
         const parts = msg.split(':');
         const status = parts[1];
         
         if (status === 'error') {
+            openingCase = false;
             const err = parts[2];
             if (err === 'not_subscribed') tg.showAlert('Подпишитесь на @arcade_ludo!');
             else if (err === 'already_opened') tg.showAlert('Уже открывали!');
             else if (err === 'no_balance') tg.showAlert('Недостаточно звёзд!');
             else tg.showAlert('Ошибка!');
-            document.getElementById('page-cases').classList.remove('active');
+            document.getElementById('page-case-open').classList.remove('active');
         } else if (status === 'success') {
+            openingCase = false;
             const name = parts[2];
             const val = parts[3];
             const newBal = parts[4];
             userBalance = parseInt(newBal);
             updateUI();
-            document.getElementById('case-result').style.display = 'block';
-            document.getElementById('case-result-text').textContent = `${name} +${val} ⭐`;
+            
+            document.getElementById('case-result-block').style.display = 'block';
+            document.getElementById('case-result-text').innerHTML = `<b>${name}</b><br>+${val} ⭐`;
         }
     }
     if (typeof msg === 'string' && msg.startsWith('withdraw:')) {
@@ -462,7 +407,3 @@ window.postMessage = function(msg, origin) {
     }
     origPostMessage.call(this, msg, origin);
 };
-
-function openDuel() {
-    tg.showAlert('Дуэли скоро будут!');
-        }
