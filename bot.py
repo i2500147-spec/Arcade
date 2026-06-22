@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import json
+import os
 from datetime import datetime, timedelta
 from threading import Thread
 from flask import Flask, send_from_directory, request, jsonify
@@ -22,7 +23,7 @@ CHANNEL_TAG = "arcade_ludo"
 OWNER_ID = 8131755675
 TON_WALLET = "UQAISFpye-QozqPlK1iX_qHPmYzEphSNalQsFojALxuLXpx6"
 STAR_PRICE_TON = 0.006
-WEBAPP_URL = "arcade-production-65b2.up.railway.app"
+WEBAPP_URL = "https://arcade-production-65b2.up.railway.app"
 DB_NAME = "arcade.db"
 
 # ==================== FLASK ====================
@@ -85,13 +86,32 @@ def api_shop():
         {"name": "Mightly Arms", "emoji": "💪", "value": 10000},
         {"name": "Loot Bag", "emoji": "🎒", "value": 9000},
         {"name": "Artisan Bricks", "emoji": "🧱", "value": 5000},
+        {"name": "Diamond Hands", "emoji": "💎", "value": 7500},
+        {"name": "Crypto Punk", "emoji": "🤖", "value": 12000},
+        {"name": "Golden Ape", "emoji": "🦍", "value": 8500},
+        {"name": "Moon Rocket", "emoji": "🌙", "value": 6800},
+        {"name": "Bitcoin Lord", "emoji": "₿", "value": 14000},
         {"name": "Snoop Dogg", "emoji": "🐕", "value": 1300},
         {"name": "Torch", "emoji": "🔥", "value": 450},
         {"name": "Ice Cream", "emoji": "🍦", "value": 420},
+        {"name": "Ghost Spirit", "emoji": "👻", "value": 600},
+        {"name": "Phoenix", "emoji": "🦅", "value": 800},
+        {"name": "Dragon Egg", "emoji": "🥚", "value": 1100},
+        {"name": "Magic Lamp", "emoji": "🪔", "value": 950},
+        {"name": "Pirate Ship", "emoji": "🏴‍☠️", "value": 700},
         {"name": "Ring", "emoji": "💍", "value": 100},
         {"name": "Cake", "emoji": "🎂", "value": 50},
         {"name": "Rose", "emoji": "🌹", "value": 25},
-        {"name": "Teddy Bear", "emoji": "🧸", "value": 15}
+        {"name": "Teddy Bear", "emoji": "🧸", "value": 15},
+        {"name": "Magic Wand", "emoji": "🪄", "value": 200},
+        {"name": "Crystal Ball", "emoji": "🔮", "value": 180},
+        {"name": "Golden Key", "emoji": "🗝️", "value": 150},
+        {"name": "Crown", "emoji": "👑", "value": 300},
+        {"name": "Ruby", "emoji": "💎", "value": 250},
+        {"name": "Amulet", "emoji": "📿", "value": 120},
+        {"name": "Sword", "emoji": "⚔️", "value": 80},
+        {"name": "Shield", "emoji": "🛡️", "value": 90},
+        {"name": "Potion", "emoji": "🧪", "value": 60},
     ]
     return jsonify(nfts)
 
@@ -179,7 +199,8 @@ def api_upgrade():
     return loop.run_until_complete(process())
 
 def run_flask():
-    flask_app.run(host='0.0.0.0', port=8000)
+    port = int(os.environ.get('PORT', 8000))
+    flask_app.run(host='0.0.0.0', port=port)
 
 # ==================== БАЗА ДАННЫХ ====================
 async def init_db():
@@ -231,21 +252,17 @@ async def process_ton(bot: Bot):
             txs = await check_ton()
             for tx in txs:
                 tx_hash = tx.get("transaction_id", {}).get("hash", "")
-                if not tx_hash:
-                    continue
+                if not tx_hash: continue
                     
                 async with aiosqlite.connect(DB_NAME) as db:
                     cur = await db.execute("SELECT tx_hash FROM processed_tx WHERE tx_hash=?", (tx_hash,))
-                    if await cur.fetchone():
-                        continue
+                    if await cur.fetchone(): continue
                     
                     msg = tx.get("in_msg", {})
-                    if not msg or msg.get("source") == "":
-                        continue
+                    if not msg or msg.get("source") == "": continue
                     
                     val = int(msg.get("value", 0)) / 1_000_000_000
-                    if val <= 0.001:
-                        continue
+                    if val <= 0.001: continue
                     
                     cur = await db.execute(
                         "SELECT id, user_id, amount_stars FROM deposits WHERE status='waiting' AND expected_amount<=? ORDER BY expected_amount DESC LIMIT 1",
@@ -259,10 +276,8 @@ async def process_ton(bot: Bot):
                         await db.commit()
                         try:
                             await bot.send_message(dep[1], f"✅ +{dep[2]} ⭐ зачислено!", parse_mode=ParseMode.HTML)
-                        except:
-                            pass
-        except:
-            pass
+                        except: pass
+        except: pass
         await asyncio.sleep(30)
 
 # ==================== ФУНКЦИИ ====================
@@ -337,10 +352,7 @@ async def webapp_handler(message: types.Message, bot: Bot):
             await db.commit()
         
         link = f"ton://transfer/{TON_WALLET}?amount={ton}&text={comm}"
-        await message.answer(
-            f"💎 <b>{stars} ⭐</b>\n💳 <b>{ton} TON</b>\n\n📤 <code>{TON_WALLET}</code>\n💬 <code>{comm}</code>\n\n🔗 <a href='{link}'>Оплатить</a>",
-            parse_mode=ParseMode.HTML
-        )
+        await message.answer(f"💎 <b>{stars} ⭐</b>\n💳 <b>{ton} TON</b>\n\n📤 <code>{TON_WALLET}</code>\n💬 <code>{comm}</code>\n\n🔗 <a href='{link}'>Оплатить</a>", parse_mode=ParseMode.HTML)
     
     elif act == "withdraw":
         stars = data.get("amount", 0)
@@ -348,14 +360,8 @@ async def webapp_handler(message: types.Message, bot: Bot):
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
             r = await cur.fetchone()
             bal = r[0] if r else 0
-            
-            if stars < 100:
-                await message.answer("withdraw:min")
-                return
-            if stars > bal:
-                await message.answer("withdraw:no_balance")
-                return
-            
+            if stars < 100: await message.answer("withdraw:min"); return
+            if stars > bal: await message.answer("withdraw:no_balance"); return
             await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (stars, uid))
             await db.execute("INSERT INTO withdrawals (user_id, amount_stars) VALUES (?,?)", (uid, stars))
             await db.commit()
@@ -369,16 +375,11 @@ async def webapp_handler(message: types.Message, bot: Bot):
         
         if case == "daily":
             subbed = await check_sub(bot, uid)
-            if not subbed:
-                await message.answer("case:error,not_subscribed")
-                return
-            
+            if not subbed: await message.answer("case:error,not_subscribed"); return
             async with aiosqlite.connect(DB_NAME) as db:
                 cur = await db.execute("SELECT last_daily FROM users WHERE user_id=?", (uid,))
                 r = await cur.fetchone()
-                if r and r[0] == datetime.now().strftime("%Y-%m-%d"):
-                    await message.answer("case:error,already_opened")
-                    return
+                if r and r[0] == datetime.now().strftime("%Y-%m-%d"): await message.answer("case:error,already_opened"); return
                 await db.execute("UPDATE users SET last_daily=? WHERE user_id=?", (datetime.now().strftime("%Y-%m-%d"), uid))
                 await db.commit()
         
@@ -386,56 +387,22 @@ async def webapp_handler(message: types.Message, bot: Bot):
             async with aiosqlite.connect(DB_NAME) as db:
                 cur = await db.execute("SELECT last_allornothing FROM users WHERE user_id=?", (uid,))
                 r = await cur.fetchone()
-                if r and r[0] == datetime.now().strftime("%Y-%m-%d"):
-                    await message.answer("case:error,already_opened")
-                    return
+                if r and r[0] == datetime.now().strftime("%Y-%m-%d"): await message.answer("case:error,already_opened"); return
                 await db.execute("UPDATE users SET last_allornothing=? WHERE user_id=?", (datetime.now().strftime("%Y-%m-%d"), uid))
                 await db.commit()
         
         cases = {
-            "daily": {"price": 0, "items": [
-                ("Scared Cat", 16000, 1), ("Mightly Arms", 10000, 1), ("Loot Bag", 9000, 2),
-                ("Artisan Bricks", 5000, 3), ("5 ⭐", 5, 30), ("1 ⭐", 1, 30), ("3 ⭐", 3, 33)
-            ]},
-            "valera": {"price": 3, "items": [
-                ("3 ⭐", 3, 50), ("5 ⭐", 5, 40), ("10 ⭐", 10, 10)
-            ]},
-            "bumzhikha": {"price": 5, "items": [
-                ("5 ⭐", 5, 50), ("15 ⭐", 15, 30), ("30 ⭐", 30, 16), ("50 ⭐", 50, 14)
-            ]},
-            "svidanie": {"price": 50, "items": [
-                ("5 ⭐", 5, 1), ("4 ⭐", 4, 2), ("3 ⭐", 3, 3), ("7 ⭐", 7, 4),
-                ("50 ⭐", 50, 40), ("75 ⭐", 75, 25), ("100 ⭐", 100, 20), ("200 ⭐", 200, 5)
-            ]},
-            "otel": {"price": 75, "items": [
-                ("5 ⭐", 5, 1), ("4 ⭐", 4, 2), ("3 ⭐", 3, 3), ("1 ⭐", 1, 4),
-                ("80 ⭐", 80, 50), ("150 ⭐", 150, 25), ("200 ⭐", 200, 15)
-            ]},
-            "forever": {"price": 300, "items": [
-                ("1 ⭐", 1, 1), ("10 ⭐", 10, 5), ("4 ⭐", 4, 4),
-                ("350 ⭐", 350, 50), ("400 ⭐", 400, 20), ("500 ⭐", 500, 15), ("1000 ⭐", 1000, 5)
-            ]},
-            "allornothing": {"price": 2000, "items": [
-                ("1000 ⭐", 1000, 50), ("5000 ⭐", 5000, 50)
-            ]}
+            "daily": {"price": 0, "items": [("Scared Cat", 16000, 1), ("Mightly Arms", 10000, 1), ("Loot Bag", 9000, 2), ("Artisan Bricks", 5000, 3), ("5 ⭐", 5, 30), ("1 ⭐", 1, 30), ("3 ⭐", 3, 33)]},
+            "valera": {"price": 3, "items": [("3 ⭐", 3, 50), ("5 ⭐", 5, 40), ("10 ⭐", 10, 10)]},
+            "bumzhikha": {"price": 5, "items": [("5 ⭐", 5, 50), ("15 ⭐", 15, 30), ("30 ⭐", 30, 16), ("50 ⭐", 50, 14)]},
+            "svidanie": {"price": 50, "items": [("5 ⭐", 5, 1), ("4 ⭐", 4, 2), ("3 ⭐", 3, 3), ("7 ⭐", 7, 4), ("50 ⭐", 50, 40), ("75 ⭐", 75, 25), ("100 ⭐", 100, 20), ("200 ⭐", 200, 5)]},
+            "otel": {"price": 75, "items": [("5 ⭐", 5, 1), ("4 ⭐", 4, 2), ("3 ⭐", 3, 3), ("1 ⭐", 1, 4), ("80 ⭐", 80, 50), ("150 ⭐", 150, 25), ("200 ⭐", 200, 15)]},
+            "forever": {"price": 300, "items": [("1 ⭐", 1, 1), ("10 ⭐", 10, 5), ("4 ⭐", 4, 4), ("350 ⭐", 350, 50), ("400 ⭐", 400, 20), ("500 ⭐", 500, 15), ("1000 ⭐", 1000, 5)]},
+            "allornothing": {"price": 2000, "items": [("1000 ⭐", 1000, 50), ("5000 ⭐", 5000, 50)]}
         }
         
         c = cases.get(case)
-        if not c:
-            await message.answer("case:error,not_found")
-            return
+        if not c: await message.answer("case:error,not_found"); return
         
         async with aiosqlite.connect(DB_NAME) as db:
-            cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
-            r = await cur.fetchone()
-            bal = r[0] if r else 0
-            
-            if c["price"] > 0 and bal < c["price"]:
-                await message.answer(f"case:error,no_balance")
-                return
-            
-            if c["price"] > 0:
-                await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (c["price"], uid))
-            
-            total = sum(it[2] for it in c["items"])
-            rnd = random.randin
+        
