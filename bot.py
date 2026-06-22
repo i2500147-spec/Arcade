@@ -2,6 +2,9 @@ import asyncio
 import logging
 import json
 import os
+import sys
+print(f"Python: {sys.version}")
+print(f"Импорты OK")
 from datetime import datetime
 from threading import Thread
 from flask import Flask, send_from_directory, request, jsonify
@@ -350,6 +353,12 @@ async def main():
     print("✅ База готова")
     Thread(target=run_flask, daemon=True).start()
     print("🌐 Flask запущен")
+try:
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    print("✅ Бот создан")
+except Exception as e:
+    print(f"❌ Ошибка бота: {e}")
+    raise
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     dp.message.register(start_cmd, Command("start"))
