@@ -2,7 +2,7 @@ import asyncio
 import logging
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from threading import Thread
 from flask import Flask, send_from_directory, request, jsonify
 from aiogram import Bot, Dispatcher, types, F
@@ -46,8 +46,7 @@ def api_user(uid):
             if r:
                 return jsonify({"balance": r[0], "ref_code": r[1], "ref_earned": r[2]})
             return jsonify({"balance": 0, "ref_code": "", "ref_earned": 0})
-    loop = asyncio.new_event_loop()
-    return loop.run_until_complete(get())
+    return asyncio.new_event_loop().run_until_complete(get())
 
 @flask_app.route('/api/inventory/<int:uid>')
 def api_inventory(uid):
@@ -56,28 +55,18 @@ def api_inventory(uid):
             cur = await db.execute("SELECT item_name, item_value, item_emoji FROM inventory WHERE user_id=? ORDER BY obtained_at DESC", (uid,))
             items = await cur.fetchall()
             return jsonify([{"name": i[0], "value": i[1], "emoji": i[2]} for i in items])
-    loop = asyncio.new_event_loop()
-    return loop.run_until_complete(get())
+    return asyncio.new_event_loop().run_until_complete(get())
 
 @flask_app.route('/api/leaderboard')
 def api_leaderboard():
     async def get():
-        today = datetime.now().strftime("%Y-%m-%d")
         async with aiosqlite.connect(DB_NAME) as db:
-            cur = await db.execute("""
-                SELECT u.user_id, u.username, u.first_name, COALESCE(SUM(w.amount_stars), 0) as total
-                FROM users u LEFT JOIN withdrawals w ON u.user_id = w.user_id AND w.status='done' AND date(w.timestamp)=?
-                GROUP BY u.user_id ORDER BY total DESC LIMIT 10
-            """, (today,))
+            cur = await db.execute("SELECT u.username, u.first_name, COALESCE(SUM(w.amount_stars), 0) FROM users u LEFT JOIN withdrawals w ON u.user_id=w.user_id AND w.status='done' GROUP BY u.user_id ORDER BY 3 DESC LIMIT 10")
             top = await cur.fetchall()
             cur2 = await db.execute("SELECT COALESCE(SUM(amount_stars), 0) FROM withdrawals WHERE status='done'")
-            total_withdrawn = (await cur2.fetchone())[0]
-            return jsonify({
-                "top": [{"user_id": t[0], "username": t[1], "first_name": t[2], "total": t[3]} for t in top],
-                "total_withdrawn": total_withdrawn
-            })
-    loop = asyncio.new_event_loop()
-    return loop.run_until_complete(get())
+            tw = (await cur2.fetchone())[0]
+            return jsonify({"top": [{"name": t[1] or t[0] or "User", "total": t[2]} for t in top], "total_withdrawn": tw})
+    return asyncio.new_event_loop().run_until_complete(get())
 
 @flask_app.route('/api/shop')
 def api_shop():
@@ -118,35 +107,25 @@ def api_shop():
 @flask_app.route('/api/buy_nft', methods=['POST'])
 def api_buy_nft():
     data = request.json
-    uid = data.get('uid')
-    name = data.get('name')
-    value = data.get('value')
-    emoji = data.get('emoji')
-    
-    async def process():
+    uid, name, value, emoji = data['uid'], data['name'], data['value'], data['emoji']
+    async def p():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
             r = await cur.fetchone()
             if not r or r[0] < value:
                 return jsonify({"error": "no_balance"})
             await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (value, uid))
-            await db.execute("INSERT INTO inventory (user_id, item_name, item_value, item_emoji) VALUES (?,?,?,?)",
-                            (uid, name, value, emoji))
+            await db.execute("INSERT INTO inventory (user_id, item_name, item_value, item_emoji) VALUES (?,?,?,?)", (uid, name, value, emoji))
             await db.commit()
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
-            new_bal = (await cur.fetchone())[0]
-            return jsonify({"success": True, "balance": new_bal})
-    loop = asyncio.new_event_loop()
-    return loop.run_until_complete(process())
+            return jsonify({"success": True, "balance": (await cur.fetchone())[0]})
+    return asyncio.new_event_loop().run_until_complete(p())
 
 @flask_app.route('/api/sell_nft', methods=['POST'])
 def api_sell_nft():
     data = request.json
-    uid = data.get('uid')
-    name = data.get('name')
-    value = data.get('value')
-    
-    async def process():
+    uid, name, value = data['uid'], data['name'], data['value']
+    async def p():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, name))
             item = await cur.fetchone()
@@ -156,47 +135,32 @@ def api_sell_nft():
             await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (value, uid))
             await db.commit()
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
-            new_bal = (await cur.fetchone())[0]
-            return jsonify({"success": True, "balance": new_bal})
-    loop = asyncio.new_event_loop()
-    return loop.run_until_complete(process())
+            return jsonify({"success": True, "balance": (await cur.fetchone())[0]})
+    return asyncio.new_event_loop().run_until_complete(p())
 
 @flask_app.route('/api/upgrade', methods=['POST'])
 def api_upgrade():
     data = request.json
-    uid = data.get('uid')
-    from_nft = data.get('from')
-    to_nft = data.get('to')
-    
-    async def process():
-        from_val = from_nft.get('value', 0)
-        to_val = to_nft.get('value', 0)
-        if from_val >= to_val:
-            return jsonify({"error": "no_sense"})
-        
-        ratio = from_val / to_val
+    uid, fr, to = data['uid'], data['from'], data['to']
+    async def p():
+        ratio = fr['value'] / to['value']
         chance = max(1, min(50, int(ratio * 100)))
-        
         async with aiosqlite.connect(DB_NAME) as db:
-            cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, from_nft['name']))
+            cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, fr['name']))
             item = await cur.fetchone()
             if not item:
                 return jsonify({"error": "not_found"})
-            
             won = random.randint(1, 100) <= chance
-            
             if won:
                 await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
-                await db.execute("INSERT INTO inventory (user_id, item_name, item_value, item_emoji) VALUES (?,?,?,?)",
-                                (uid, to_nft['name'], to_nft['value'], to_nft['emoji']))
+                await db.execute("INSERT INTO inventory (user_id, item_name, item_value, item_emoji) VALUES (?,?,?,?)", (uid, to['name'], to['value'], to['emoji']))
                 await db.commit()
                 return jsonify({"success": True, "won": True, "chance": chance})
             else:
                 await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
                 await db.commit()
                 return jsonify({"success": True, "won": False, "chance": chance})
-    loop = asyncio.new_event_loop()
-    return loop.run_until_complete(process())
+    return asyncio.new_event_loop().run_until_complete(p())
 
 def run_flask():
     port = int(os.environ.get('PORT', 8000))
@@ -205,42 +169,20 @@ def run_flask():
 # ==================== БАЗА ДАННЫХ ====================
 async def init_db():
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('''CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT,
-            balance INTEGER DEFAULT 0, ref_code TEXT UNIQUE, invited_by INTEGER,
-            ref_earned INTEGER DEFAULT 0, last_daily TEXT, last_allornothing TEXT)''')
-        await db.execute('''CREATE TABLE IF NOT EXISTS deposits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_ton REAL,
-            amount_stars INTEGER, expected_amount REAL, comment TEXT UNIQUE,
-            status TEXT DEFAULT 'waiting', tx_hash TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        await db.execute('''CREATE TABLE IF NOT EXISTS withdrawals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
-            amount_stars INTEGER, status TEXT DEFAULT 'pending',
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        await db.execute('''CREATE TABLE IF NOT EXISTS inventory (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
-            item_name TEXT, item_value INTEGER, item_emoji TEXT,
-            obtained_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        await db.execute('''CREATE TABLE IF NOT EXISTS cases_opened (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
-            case_name TEXT, reward TEXT, reward_value INTEGER,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        await db.execute('''CREATE TABLE IF NOT EXISTS processed_tx (
-            tx_hash TEXT PRIMARY KEY)''')
-        await db.execute('''CREATE TABLE IF NOT EXISTS duels (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, creator_id INTEGER,
-            opponent_id INTEGER, creator_nft TEXT, opponent_nft TEXT,
-            winner_id INTEGER, status TEXT DEFAULT 'waiting',
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+        await db.execute('''CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, balance INTEGER DEFAULT 0, ref_code TEXT UNIQUE, invited_by INTEGER, ref_earned INTEGER DEFAULT 0, last_daily TEXT, last_allornothing TEXT)''')
+        await db.execute('''CREATE TABLE IF NOT EXISTS deposits (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_ton REAL, amount_stars INTEGER, expected_amount REAL, comment TEXT UNIQUE, status TEXT DEFAULT 'waiting', tx_hash TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+        await db.execute('''CREATE TABLE IF NOT EXISTS withdrawals (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_stars INTEGER, status TEXT DEFAULT 'pending', timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+        await db.execute('''CREATE TABLE IF NOT EXISTS inventory (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, item_name TEXT, item_value INTEGER, item_emoji TEXT, obtained_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+        await db.execute('''CREATE TABLE IF NOT EXISTS cases_opened (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, case_name TEXT, reward TEXT, reward_value INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+        await db.execute('''CREATE TABLE IF NOT EXISTS processed_tx (tx_hash TEXT PRIMARY KEY)''')
+        await db.execute('''CREATE TABLE IF NOT EXISTS duels (id INTEGER PRIMARY KEY AUTOINCREMENT, creator_id INTEGER, opponent_id INTEGER, winner_id INTEGER, status TEXT DEFAULT 'waiting', timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
         await db.commit()
 
 # ==================== TON ====================
 async def check_ton():
-    url = f"https://toncenter.com/api/v2/getTransactions?address={TON_WALLET}&limit=10"
     try:
         async with aiohttp.ClientSession() as s:
-            async with s.get(url, timeout=15) as r:
+            async with s.get(f"https://toncenter.com/api/v2/getTransactions?address={TON_WALLET}&limit=10", timeout=15) as r:
                 data = await r.json()
                 return data.get("result", []) if data.get("ok") else []
     except:
@@ -249,92 +191,67 @@ async def check_ton():
 async def process_ton(bot: Bot):
     while True:
         try:
-            txs = await check_ton()
-            for tx in txs:
+            for tx in await check_ton():
                 tx_hash = tx.get("transaction_id", {}).get("hash", "")
                 if not tx_hash: continue
-                    
                 async with aiosqlite.connect(DB_NAME) as db:
-                    cur = await db.execute("SELECT tx_hash FROM processed_tx WHERE tx_hash=?", (tx_hash,))
-                    if await cur.fetchone(): continue
-                    
+                    if await (await db.execute("SELECT tx_hash FROM processed_tx WHERE tx_hash=?", (tx_hash,))).fetchone(): continue
                     msg = tx.get("in_msg", {})
                     if not msg or msg.get("source") == "": continue
-                    
                     val = int(msg.get("value", 0)) / 1_000_000_000
                     if val <= 0.001: continue
-                    
-                    cur = await db.execute(
-                        "SELECT id, user_id, amount_stars FROM deposits WHERE status='waiting' AND expected_amount<=? ORDER BY expected_amount DESC LIMIT 1",
-                        (val,))
+                    cur = await db.execute("SELECT id, user_id, amount_stars FROM deposits WHERE status='waiting' AND expected_amount<=? ORDER BY expected_amount DESC LIMIT 1", (val,))
                     dep = await cur.fetchone()
-                    
                     if dep:
                         await db.execute("UPDATE deposits SET status='paid', tx_hash=? WHERE id=?", (tx_hash, dep[0]))
                         await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (dep[2], dep[1]))
                         await db.execute("INSERT OR IGNORE INTO processed_tx VALUES(?)", (tx_hash,))
                         await db.commit()
-                        try:
-                            await bot.send_message(dep[1], f"✅ +{dep[2]} ⭐ зачислено!", parse_mode=ParseMode.HTML)
+                        try: await bot.send_message(dep[1], f"✅ +{dep[2]} ⭐ зачислено!", parse_mode=ParseMode.HTML)
                         except: pass
         except: pass
         await asyncio.sleep(30)
 
 # ==================== ФУНКЦИИ ====================
-async def generate_ref_code(uid: int) -> str:
+async def generate_ref_code(uid):
     code = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("UPDATE users SET ref_code=? WHERE user_id=?", (code, uid))
         await db.commit()
     return code
 
-async def check_sub(bot: Bot, uid: int) -> bool:
+async def check_sub(bot, uid):
     try:
-        member = await bot.get_chat_member(f"@{CHANNEL_TAG}", uid)
-        return member.status not in ['left', 'kicked']
+        m = await bot.get_chat_member(f"@{CHANNEL_TAG}", uid)
+        return m.status not in ['left', 'kicked']
     except:
         return False
 
-# ==================== КЛАВИАТУРА ====================
 def main_kb():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🎮 Играть", web_app=WebAppInfo(url=WEBAPP_URL))],
-            [KeyboardButton(text="📢 Канал", url="https://t.me/arcade_ludo")]
-        ],
-        resize_keyboard=True
-    )
+    return ReplyKeyboardMarkup(keyboard=[
+        [KeyboardButton(text="🎮 Играть", web_app=WebAppInfo(url=WEBAPP_URL))],
+        [KeyboardButton(text="📢 Канал", url="https://t.me/arcade_ludo")]
+    ], resize_keyboard=True)
 
 # ==================== ХЕНДЛЕРЫ ====================
 async def start_cmd(message: types.Message, bot: Bot):
     uid = message.from_user.id
-    uname = message.from_user.username
-    fn = message.from_user.first_name
-    
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute("INSERT OR IGNORE INTO users (user_id, username, first_name) VALUES (?,?,?)", (uid, uname, fn))
+        await db.execute("INSERT OR IGNORE INTO users (user_id, username, first_name) VALUES (?,?,?)", (uid, message.from_user.username, message.from_user.first_name))
         cur = await db.execute("SELECT ref_code FROM users WHERE user_id=?", (uid,))
-        r = await cur.fetchone()
-        if not r or not r[0]:
+        if not (await cur.fetchone())[0]:
             await generate_ref_code(uid)
-        
         args = message.text.split()
         if len(args) > 1 and args[1].startswith("ref_"):
             ref_code = args[1].replace("ref_", "")
             cur2 = await db.execute("SELECT user_id FROM users WHERE ref_code=?", (ref_code,))
             ref_user = await cur2.fetchone()
             if ref_user and ref_user[0] != uid:
-                cur3 = await db.execute("SELECT id FROM users WHERE user_id=? AND invited_by IS NOT NULL", (uid,))
-                if not await cur3.fetchone():
+                if not await (await db.execute("SELECT id FROM users WHERE user_id=? AND invited_by IS NOT NULL", (uid,))).fetchone():
                     await db.execute("UPDATE users SET invited_by=? WHERE user_id=?", (ref_user[0], uid))
         await db.commit()
-    
     await bot.set_chat_menu_button(chat_id=uid, menu_button=MenuButtonWebApp(text="🎮 Играть", web_app=WebAppInfo(url=WEBAPP_URL)))
-    
-    await message.answer(
-        "🎰 <b>Это Arcade.</b>\n\n🎁 <b>Кейсы.</b> Жмёшь — выпадает.\n⚡️ <b>Апгрейды.</b> Меняй мелочь на редкость.\n🚀 <b>Краш.</b> Соскочи вовремя.\n👑 <b>Казна.</b> Банк забирает топ-1.\n\n👇 Залетай",
-        reply_markup=main_kb(), parse_mode=ParseMode.HTML
-    )
+    await message.answer("🎰 <b>Это Arcade.</b>\n\n🎁 <b>Кейсы.</b> Жмёшь — выпадает.\n⚡️ <b>Апгрейды.</b> Меняй мелочь на редкость.\n🚀 <b>Краш.</b> Соскочи вовремя.\n👑 <b>Казна.</b> Банк забирает топ-1.\n\n👇 Залетай", reply_markup=main_kb(), parse_mode=ParseMode.HTML)
 
 async def webapp_handler(message: types.Message, bot: Bot):
     uid = message.from_user.id
@@ -345,12 +262,9 @@ async def webapp_handler(message: types.Message, bot: Bot):
         stars = data.get("amount", 0)
         ton = round(stars * STAR_PRICE_TON, 4)
         comm = f"BUY_{uid}_{int(datetime.now().timestamp())}"
-        
         async with aiosqlite.connect(DB_NAME) as db:
-            await db.execute("INSERT INTO deposits (user_id, amount_ton, amount_stars, expected_amount, comment) VALUES (?,?,?,?,?)",
-                            (uid, ton, stars, ton, comm))
+            await db.execute("INSERT INTO deposits (user_id, amount_ton, amount_stars, expected_amount, comment) VALUES (?,?,?,?,?)", (uid, ton, stars, ton, comm))
             await db.commit()
-        
         link = f"ton://transfer/{TON_WALLET}?amount={ton}&text={comm}"
         await message.answer(f"💎 <b>{stars} ⭐</b>\n💳 <b>{ton} TON</b>\n\n📤 <code>{TON_WALLET}</code>\n💬 <code>{comm}</code>\n\n🔗 <a href='{link}'>Оплатить</a>", parse_mode=ParseMode.HTML)
     
@@ -358,24 +272,20 @@ async def webapp_handler(message: types.Message, bot: Bot):
         stars = data.get("amount", 0)
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
-            r = await cur.fetchone()
-            bal = r[0] if r else 0
+            bal = (await cur.fetchone())[0]
             if stars < 100: await message.answer("withdraw:min"); return
             if stars > bal: await message.answer("withdraw:no_balance"); return
             await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (stars, uid))
             await db.execute("INSERT INTO withdrawals (user_id, amount_stars) VALUES (?,?)", (uid, stars))
             await db.commit()
-        
         user_mention = f"@{message.from_user.username}" if message.from_user.username else f"ID:{uid}"
         await bot.send_message(OWNER_ID, f"📤 Вывод\n👤 {user_mention}\n🆔 {uid}\n💎 {stars} ⭐\n📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}")
         await message.answer("withdraw:ok")
     
     elif act == "open_case":
         case = data.get("case", "")
-        
         if case == "daily":
-            subbed = await check_sub(bot, uid)
-            if not subbed: await message.answer("case:error,not_subscribed"); return
+            if not await check_sub(bot, uid): await message.answer("case:error,not_subscribed"); return
             async with aiosqlite.connect(DB_NAME) as db:
                 cur = await db.execute("SELECT last_daily FROM users WHERE user_id=?", (uid,))
                 r = await cur.fetchone()
@@ -405,4 +315,36 @@ async def webapp_handler(message: types.Message, bot: Bot):
         if not c: await message.answer("case:error,not_found"); return
         
         async with aiosqlite.connect(DB_NAME) as db:
-        
+            cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
+            bal = (await cur.fetchone())[0]
+            
+            if c["price"] > 0 and bal < c["price"]:
+                await message.answer("case:error,no_balance")
+                return
+            
+            if c["price"] > 0:
+                await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (c["price"], uid))
+            
+            total = sum(it[2] for it in c["items"])
+            rnd = random.randint(1, total)
+            cur = 0
+            for name, val, ch in c["items"]:
+                cur += ch
+                if rnd <= cur:
+                    await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (val, uid))
+                    await db.execute("INSERT INTO cases_opened (user_id, case_name, reward, reward_value) VALUES (?,?,?,?)", (uid, case, name, val))
+                    nft_emojis = {"Scared Cat": "🐱", "Mightly Arms": "💪", "Loot Bag": "🎒", "Artisan Bricks": "🧱"}
+                    if name in nft_emojis:
+                        await db.execute("INSERT INTO inventory (user_id, item_name, item_value, item_emoji) VALUES (?,?,?,?)", (uid, name, val, nft_emojis[name]))
+                    await db.commit()
+                    new_bal = (await (await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))).fetchone())[0]
+                    await message.answer(f"case:success,{name},{val},{new_bal}")
+                    return
+        await message.answer("case:error,unknown")
+
+# ==================== ЗАПУСК ====================
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    await init_db()
+    print("✅ База готова")
+    Thread(target=run_flask, daemon=True).start()
