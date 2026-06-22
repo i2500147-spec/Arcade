@@ -355,4 +355,4 @@ async def main():
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     dp.message.register(start_cmd, Command("start"))
-    dp.message.register(webapp_handler,
+    dp.message.register(webapp_handler, F.web_app_data)
