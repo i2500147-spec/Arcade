@@ -210,7 +210,6 @@ input:focus { border-color: var(--blue); }
     display: flex; align-items: center; gap: 10px;
     background: var(--card); padding: 12px; border-radius: var(--radius); margin-bottom: 6px;
 }
-.inv-emoji { font-size: 28px; }
 .inv-name { flex: 1; }
 .inv-value { color: var(--gold); font-weight: bold; }
 .inv-sell {
@@ -221,15 +220,54 @@ input:focus { border-color: var(--blue); }
 #shop-list { display: flex; flex-direction: column; gap: 6px; }
 .shop-item {
     display: flex; align-items: center; gap: 10px;
-    background: var(--card); padding: 12px; border-radius: var(--radius); cursor: pointer;
+    background: var(--card); padding: 12px; border-radius: var(--radius);
 }
-.shop-emoji { font-size: 28px; }
 .shop-name { flex: 1; }
 .shop-price { color: var(--gold); font-weight: bold; }
 .shop-buy {
     background: var(--green); color: #fff; border: none;
     padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px;
 }
+
+.nft-icon {
+    width: 48px; height: 48px;
+    border-radius: 10px;
+    background-size: cover;
+    background-position: center;
+    background-color: var(--border);
+    flex-shrink: 0;
+}
+.nft-scared_cat { background: linear-gradient(135deg, #2a1a3a, #4a2a5a); }
+.nft-mightly_arms { background: linear-gradient(135deg, #3a1a1a, #5a2a2a); }
+.nft-loot_bag { background: linear-gradient(135deg, #1a3a1a, #2a5a2a); }
+.nft-bricks { background: linear-gradient(135deg, #3a2a1a, #5a4a2a); }
+.nft-diamond { background: linear-gradient(135deg, #1a2a3a, #2a4a5a); }
+.nft-punk { background: linear-gradient(135deg, #3a1a3a, #5a2a5a); }
+.nft-ape { background: linear-gradient(135deg, #2a3a1a, #4a5a2a); }
+.nft-rocket { background: linear-gradient(135deg, #1a1a3a, #2a2a5a); }
+.nft-bitcoin { background: linear-gradient(135deg, #3a3a1a, #5a5a2a); }
+.nft-snoop { background: linear-gradient(135deg, #1a3a2a, #2a5a4a); }
+.nft-torch { background: linear-gradient(135deg, #3a1a0a, #5a2a0a); }
+.nft-icecream { background: linear-gradient(135deg, #3a2a3a, #5a4a5a); }
+.nft-ghost { background: linear-gradient(135deg, #1a1a2a, #2a2a4a); }
+.nft-phoenix { background: linear-gradient(135deg, #3a0a0a, #5a1a1a); }
+.nft-dragon { background: linear-gradient(135deg, #0a3a0a, #1a5a1a); }
+.nft-lamp { background: linear-gradient(135deg, #3a3a0a, #5a5a1a); }
+.nft-ship { background: linear-gradient(135deg, #0a2a3a, #1a4a5a); }
+.nft-ring { background: linear-gradient(135deg, #3a0a3a, #5a1a5a); }
+.nft-cake { background: linear-gradient(135deg, #3a1a2a, #5a2a4a); }
+.nft-rose { background: linear-gradient(135deg, #3a0a1a, #5a1a2a); }
+.nft-bear { background: linear-gradient(135deg, #2a1a0a, #4a2a1a); }
+.nft-wand { background: linear-gradient(135deg, #1a0a3a, #2a1a5a); }
+.nft-crystal { background: linear-gradient(135deg, #1a3a3a, #2a5a5a); }
+.nft-key { background: linear-gradient(135deg, #3a3a0a, #5a5a1a); }
+.nft-crown { background: linear-gradient(135deg, #3a2a0a, #5a4a1a); }
+.nft-ruby { background: linear-gradient(135deg, #3a0a0a, #5a1a1a); }
+.nft-amulet { background: linear-gradient(135deg, #0a3a2a, #1a5a4a); }
+.nft-sword { background: linear-gradient(135deg, #1a1a1a, #3a3a3a); }
+.nft-shield { background: linear-gradient(135deg, #2a2a3a, #4a4a5a); }
+.nft-potion { background: linear-gradient(135deg, #0a3a0a, #1a5a1a); }
+.nft-default { background: linear-gradient(135deg, #2a2a2a, #4a4a4a); }
 
 .upgrade-circle {
     width: 120px; height: 120px; border-radius: 50%;
@@ -242,6 +280,7 @@ input:focus { border-color: var(--blue); }
 
 #page-deposit { padding: 50px 16px 16px; }
 #wallet-status { text-align: center; color: var(--gray); margin: 8px 0; font-size: 13px; }
+#promo-code { margin-bottom: 8px; }
 
 .bottom-nav {
     position: fixed; bottom: 0; left: 0; width: 100%;
