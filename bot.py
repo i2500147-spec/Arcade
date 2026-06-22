@@ -9,9 +9,11 @@ import aiosqlite
 import aiohttp
 
 BOT_TOKEN = "8941049801:AAFQHjVBXnx_58ndwkskRTwEam0g5ZaZcb0"
+BOT_USERNAME = "arcadecasinobot"
 OWNER_ID = 8131755675
 TON_WALLET = "UQAISFpye-QozqPlK1iX_qHPmYzEphSNalQsFojALxuLXpx6"
 STAR_PRICE_TON = 0.006
+WEBAPP_URL = "https://arcade-8ru7.onrender.com"
 DB_NAME = "arcade.db"
 
 flask_app = Flask(__name__, static_folder='webapp')
@@ -147,22 +149,20 @@ def api_upgrade():
 
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
-    """Принимает обновления от Telegram через webhook"""
     data = request.json
     loop = asyncio.new_event_loop()
     loop.run_until_complete(process_update(data))
     return "OK"
 
 async def process_update(data):
-    """Обрабатывает одно обновление от Telegram"""
     try:
         async with aiohttp.ClientSession() as s:
             msg = data.get('message', {})
             text = msg.get('text', '')
             chat_id = msg.get('chat', {}).get('id')
+            uid = msg.get('from', {}).get('id')
             
             if text == '/start':
-                uid = msg.get('from', {}).get('id')
                 uname = msg.get('from', {}).get('username', '')
                 fn = msg.get('from', {}).get('first_name', '')
                 
@@ -171,14 +171,22 @@ async def process_update(data):
                     cur = await db.execute("SELECT ref_code FROM users WHERE user_id=?", (uid,))
                     r = await cur.fetchone()
                     if not r or not r[0]:
-                        import string as st
-                        code = ''.join(random.choices(st.ascii_letters + st.digits, k=8))
+                        code = ''.join(random.choices('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=8))
                         await db.execute("UPDATE users SET ref_code=? WHERE user_id=?", (code, uid))
+                    
+                    args = text.split()
+                    if len(args) > 1 and args[1].startswith("ref_"):
+                        ref_code = args[1].replace("ref_", "")
+                        cur2 = await db.execute("SELECT user_id FROM users WHERE ref_code=?", (ref_code,))
+                        ref_user = await cur2.fetchone()
+                        if ref_user and ref_user[0] != uid:
+                            cur3 = await db.execute("SELECT id FROM users WHERE user_id=? AND invited_by IS NOT NULL", (uid,))
+                            if not await cur3.fetchone():
+                                await db.execute("UPDATE users SET invited_by=? WHERE user_id=?", (ref_user[0], uid))
                     await db.commit()
                 
-                # Отправляем ответ
                 keyboard = {
-                    "keyboard": [[{"text": "🎮 Играть", "web_app": {"url": "https://arcade-8ru7.onrender.com"}}], [{"text": "📢 Канал", "url": "https://t.me/arcade_ludo"}]],
+                    "keyboard": [[{"text": "🎮 Играть", "web_app": {"url": WEBAPP_URL}}], [{"text": "📢 Канал", "url": "https://t.me/arcade_ludo"}]],
                     "resize_keyboard": True
                 }
                 
@@ -192,9 +200,21 @@ async def process_update(data):
             elif msg.get('web_app_data'):
                 d = json.loads(msg['web_app_data']['data'])
                 act = d.get('action')
-                uid = msg.get('from', {}).get('id')
                 
-                if act == "pay":
+                if act == "get_ref":
+                    async with aiosqlite.connect(DB_NAME) as db:
+                        cur = await db.execute("SELECT ref_code FROM users WHERE user_id=?", (uid,))
+                        r = await cur.fetchone()
+                        code = r[0] if r and r[0] else ''.join(random.choices('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=8))
+                        if not r or not r[0]:
+                            await db.execute("UPDATE users SET ref_code=? WHERE user_id=?", (code, uid))
+                            await db.commit()
+                    await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
+                        "chat_id": chat_id,
+                        "text": f"ref:{code}"
+                    })
+                
+                elif act == "pay":
                     stars = d.get("amount", 0)
                     ton = round(stars * STAR_PRICE_TON, 4)
                     comm = f"BUY_{uid}_{int(datetime.now().timestamp())}"
@@ -222,46 +242,103 @@ async def process_update(data):
                         await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (stars, uid))
                         await db.execute("INSERT INTO withdrawals (user_id, amount_stars) VALUES (?,?)", (uid, stars))
                         await db.commit()
+                    user_mention = msg.get('from', {}).get('username', f"ID:{uid}")
                     await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
                         "chat_id": OWNER_ID,
-                        "text": f"📤 Вывод\n👤 {uid}\n💎 {stars} ⭐\n📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+                        "text": f"📤 Вывод\n👤 @{user_mention}\n🆔 {uid}\n💎 {stars} ⭐\n📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
                     })
                     await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "withdraw:ok"})
                 
                 elif act == "open_case":
                     case = d.get("case", "")
-                    # ... case logic similar to before ...
-                    await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": f"case:success,Test,100,1000"})
-    except:
-        pass
+                    
+                    if case == "daily":
+                        try:
+                            async with s.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember?chat_id=@arcade_ludo&user_id={uid}") as r:
+                                member = await r.json()
+                                if not member.get('ok') or member['result']['status'] in ['left', 'kicked']:
+                                    await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,not_subscribed"})
+                                    return
+                        except:
+                            await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,not_subscribed"})
+                            return
+                        
+                        async with aiosqlite.connect(DB_NAME) as db:
+                            cur = await db.execute("SELECT last_daily FROM users WHERE user_id=?", (uid,))
+                            r = await cur.fetchone()
+                            if r and r[0] == datetime.now().strftime("%Y-%m-%d"):
+                                await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,already_opened"})
+                                return
+                            await db.execute("UPDATE users SET last_daily=? WHERE user_id=?", (datetime.now().strftime("%Y-%m-%d"), uid))
+                            await db.commit()
+                    
+                    if case == "allornothing":
+                        async with aiosqlite.connect(DB_NAME) as db:
+                            cur = await db.execute("SELECT last_allornothing FROM users WHERE user_id=?", (uid,))
+                            r = await cur.fetchone()
+                            if r and r[0] == datetime.now().strftime("%Y-%m-%d"):
+                                await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,already_opened"})
+                                return
+                            await db.execute("UPDATE users SET last_allornothing=? WHERE user_id=?", (datetime.now().strftime("%Y-%m-%d"), uid))
+                            await db.commit()
+                    
+                    cases = {
+                        "daily": {"price": 0, "items": [
+                            ("Scared Cat", 16000, 1), ("Mightly Arms", 10000, 1), ("Loot Bag", 9000, 2),
+                            ("Artisan Bricks", 5000, 3), ("5 ⭐", 5, 30), ("1 ⭐", 1, 30), ("3 ⭐", 3, 33)
+                        ]},
+                        "valera": {"price": 3, "items": [("3 ⭐", 3, 50), ("5 ⭐", 5, 40), ("10 ⭐", 10, 10)]},
+                        "bumzhikha": {"price": 5, "items": [("5 ⭐", 5, 50), ("15 ⭐", 15, 30), ("30 ⭐", 30, 16), ("50 ⭐", 50, 14)]},
+                        "svidanie": {"price": 50, "items": [
+                            ("5 ⭐", 5, 1), ("4 ⭐", 4, 2), ("3 ⭐", 3, 3), ("7 ⭐", 7, 4),
+                            ("50 ⭐", 50, 40), ("75 ⭐", 75, 25), ("100 ⭐", 100, 20), ("200 ⭐", 200, 5)
+                        ]},
+                        "otel": {"price": 75, "items": [
+                            ("5 ⭐", 5, 1), ("4 ⭐", 4, 2), ("3 ⭐", 3, 3), ("1 ⭐", 1, 4),
+                            ("80 ⭐", 80, 50), ("150 ⭐", 150, 25), ("200 ⭐", 200, 15)
+                        ]},
+                        "forever": {"price": 300, "items": [
+                            ("1 ⭐", 1, 1), ("10 ⭐", 10, 5), ("4 ⭐", 4, 4),
+                            ("350 ⭐", 350, 50), ("400 ⭐", 400, 20), ("500 ⭐", 500, 15), ("1000 ⭐", 1000, 5)
+                        ]},
+                        "allornothing": {"price": 2000, "items": [("1000 ⭐", 1000, 50), ("5000 ⭐", 5000, 50)]}
+                    }
+                    
+                    c = cases.get(case)
+                    if not c:
+                        await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,not_found"})
+                        return
+                    
+                    async with aiosqlite.connect(DB_NAME) as db:
+                        cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
+                        bal = (await cur.fetchone())[0]
+                        
+                        if c["price"] > 0 and bal < c["price"]:
+                            await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,no_balance"})
+                            return
+                        
+                        if c["price"] > 0:
+                            await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (c["price"], uid))
+                        
+                        total = sum(it[2] for it in c["items"])
+                        rnd = random.randint(1, total)
+                        cur = 0
+                        for name, val, ch in c["items"]:
+                            cur += ch
+                            if rnd <= cur:
+                                await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (val, uid))
+                                await db.execute("INSERT INTO cases_opened (user_id, case_name, reward, reward_value) VALUES (?,?,?,?)", (uid, case, name, val))
+                                nft_emojis = {"Scared Cat":"🐱","Mightly Arms":"💪","Loot Bag":"🎒","Artisan Bricks":"🧱"}
+                                if name in nft_emojis:
+                                    await db.execute("INSERT INTO inventory (user_id, item_name, item_value, item_emoji) VALUES (?,?,?,?)", (uid, name, val, nft_emojis[name]))
+                                await db.commit()
+                                new_bal = (await (await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))).fetchone())[0]
+                                await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": f"case:success,{name},{val},{new_bal}"})
+                                return
+                    await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,unknown"})
+    except Exception as e:
+        print(f"Error in webhook: {e}")
 
 async def init_db():
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('''CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, balance INTEGER DEFAULT 0, ref_code TEXT UNIQUE, invited_by INTEGER, ref_earned INTEGER DEFAULT 0, last_daily TEXT, last_allornothing TEXT)''')
-        await db.execute('''CREATE TABLE IF NOT EXISTS deposits (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_ton REAL, amount_stars INTEGER, expected_amount REAL, comment TEXT UNIQUE, status TEXT DEFAULT 'waiting', tx_hash TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        await db.execute('''CREATE TABLE IF NOT EXISTS withdrawals (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_stars INTEGER, status TEXT DEFAULT 'pending', timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        await db.execute('''CREATE TABLE IF NOT EXISTS inventory (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, item_name TEXT, item_value INTEGER, item_emoji TEXT, obtained_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        await db.commit()
-
-def set_webhook():
-    import requests
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url=https://arcade-8ru7.onrender.com/webhook"
-    r = requests.get(url)
-    print(f"Webhook set: {r.json()}")
-
-def run_flask():
-    port = int(os.environ.get('PORT', 8000))
-    flask_app.run(host='0.0.0.0', port=port)
-
-if __name__ == "__main__":
-    import asyncio as aio
-    loop = aio.new_event_loop()
-    loop.run_until_complete(init_db())
-    print("✅ База готова")
-    set_webhook()
-    Thread(target=run_flask, daemon=True).start()
-    print("🌐 Flask + Webhook запущен")
-    # Keep alive
-    import time
-    while True:
-        time.sleep(60)
+        await db.execute('''CREA
