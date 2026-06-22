@@ -17,8 +17,6 @@ import string
 
 # ==================== НАСТРОЙКИ ====================
 BOT_TOKEN = "8965870385:AAHZ_zppdEcBPIVl2DIdgNwds4z-BqYfv5A"
-if not BOT_TOKEN or BOT_TOKEN == "8965870385:AAHZ_zppdEcBPIVl2DIdgNwds4z-BqYfv5A":
-    raise ValueError("Токен не установлен!")
 print(f"Токен загружен: {BOT_TOKEN[:5]}...")
 BOT_USERNAME = "arcadecasinobot"
 CHANNEL_USERNAME = "@arcade_ludo"
