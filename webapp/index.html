@@ -35,9 +35,9 @@
 
     <div id="page-cases" class="page">
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('free')">🎁 Бесплатные</button>
-            <button class="tab" onclick="switchTab('cheap')">💸 Дешёвые</button>
-            <button class="tab" onclick="switchTab('rich')">👑 Богатые</button>
+            <button class="tab active" onclick="switchTab('free')">Бесплатные</button>
+            <button class="tab" onclick="switchTab('cheap')">Дешёвые</button>
+            <button class="tab" onclick="switchTab('rich')">Богатые</button>
         </div>
         <div id="tab-free" class="tab-content active">
             <div class="case-card" onclick="showCase('daily')">
@@ -78,32 +78,40 @@
     </div>
 
     <div id="page-opening" class="page fullscreen">
-        <div class="close-btn" onclick="goPage('cases')">✕</div>
+        <div class="close-btn" onclick="closeOpening()">✕</div>
         <div class="opening-container">
-            <div id="spinner" class="spinner"></div>
-            <div id="result" style="display:none;">
-                <div id="result-icon"></div>
+            <div class="slot-machine">
+                <div class="slot-track" id="slot-track">
+                    <div class="slot-item">🎁</div><div class="slot-item">💎</div><div class="slot-item">⭐</div>
+                    <div class="slot-item">💫</div><div class="slot-item">🪙</div><div class="slot-item">👑</div>
+                    <div class="slot-item">💍</div><div class="slot-item">🎉</div><div class="slot-item">🔥</div>
+                    <div class="slot-item">🍦</div><div class="slot-item">🎁</div><div class="slot-item">💎</div>
+                    <div class="slot-item">⭐</div><div class="slot-item">💫</div><div class="slot-item">🪙</div>
+                    <div class="slot-item">👑</div><div class="slot-item">💍</div><div class="slot-item">🎉</div>
+                </div>
+            </div>
+            <div class="slot-pointer"></div>
+            <div id="result-block" style="display:none;">
                 <div id="result-text"></div>
-                <button class="btn-gold" onclick="goPage('cases')">Забрать!</button>
+                <button class="btn-gold" onclick="closeResult()">Забрать!</button>
             </div>
         </div>
     </div>
 
     <div id="page-withdraw" class="page">
         <div class="page-title">Вывод звёзд</div>
-        <div class="card"><p>Минимум: <b>100 ⭐</b></p></div>
+        <div class="card"><p>Минимум: <b>100 ⭐</b></p><p>Вывод реальными деньгами</p></div>
         <input type="number" id="wd-amount" placeholder="Сколько вывести?">
-        <input type="text" id="wd-card" placeholder="Номер карты">
-        <button class="btn-gold" onclick="withdraw()">Вывести 💳</button>
+        <button class="btn-gold" onclick="withdraw()">Вывести 💰</button>
     </div>
 
     <div class="bottom-nav">
         <button class="nav-btn active" onclick="goPage('home')">🏠</button>
         <button class="nav-btn" onclick="goPage('cases')">📦</button>
-        <button class="nav-btn" onclick="goPage('withdraw')">⭐</button>
+        <button class="nav-btn" onclick="goPage('withdraw')">💰</button>
     </div>
 
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="app.js"></script>
 </body>
-          </html>
+                    </html>
