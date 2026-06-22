@@ -17,9 +17,7 @@ import random
 import string
 
 print(f"Python: {sys.version}")
-print("Импорты OK")
 
-# ==================== НАСТРОЙКИ ====================
 BOT_TOKEN = "8965870385:AAHZ_zppdEcBPIVl2DIdgNwds4z-BqYfv5A"
 BOT_USERNAME = "arcadecasinobot"
 CHANNEL_USERNAME = "@arcade_ludo"
@@ -30,7 +28,6 @@ STAR_PRICE_TON = 0.006
 WEBAPP_URL = "https://arcade-ycih.onrender.com"
 DB_NAME = "arcade.db"
 
-# ==================== FLASK ====================
 flask_app = Flask(__name__, static_folder='webapp')
 
 @flask_app.route('/')
@@ -56,7 +53,7 @@ def api_user(uid):
 def api_inventory(uid):
     async def get():
         async with aiosqlite.connect(DB_NAME) as db:
-            cur = await db.execute("SELECT item_name, item_value, item_emoji FROM inventory WHERE user_id=? ORDER BY obtained_at DESC", (uid,))
+            cur = await db.execute("SELECT item_name, item_value, item_emoji FROM inventory WHERE user_id=?", (uid,))
             items = await cur.fetchall()
             return jsonify([{"name": i[0], "value": i[1], "emoji": i[2]} for i in items])
     return asyncio.new_event_loop().run_until_complete(get())
@@ -65,87 +62,87 @@ def api_inventory(uid):
 def api_leaderboard():
     async def get():
         async with aiosqlite.connect(DB_NAME) as db:
-            cur = await db.execute("SELECT u.username, u.first_name, COALESCE(SUM(w.amount_stars), 0) FROM users u LEFT JOIN withdrawals w ON u.user_id=w.user_id AND w.status='done' GROUP BY u.user_id ORDER BY 3 DESC LIMIT 10")
+            cur = await db.execute("SELECT u.username, u.first_name, COALESCE(SUM(w.amount_stars),0) FROM users u LEFT JOIN withdrawals w ON u.user_id=w.user_id AND w.status='done' GROUP BY u.user_id ORDER BY 3 DESC LIMIT 10")
             top = await cur.fetchall()
-            cur2 = await db.execute("SELECT COALESCE(SUM(amount_stars), 0) FROM withdrawals WHERE status='done'")
+            cur2 = await db.execute("SELECT COALESCE(SUM(amount_stars),0) FROM withdrawals WHERE status='done'")
             tw = (await cur2.fetchone())[0]
-            return jsonify({"top": [{"name": t[1] or t[0] or "User", "total": t[2]} for t in top], "total_withdrawn": tw})
+            return jsonify({"top":[{"name":t[1] or t[0] or "User","total":t[2]} for t in top],"total_withdrawn":tw})
     return asyncio.new_event_loop().run_until_complete(get())
 
 @flask_app.route('/api/shop')
 def api_shop():
     nfts = [
-        {"name": "Scared Cat", "emoji": "🐱", "value": 16000},
-        {"name": "Mightly Arms", "emoji": "💪", "value": 10000},
-        {"name": "Loot Bag", "emoji": "🎒", "value": 9000},
-        {"name": "Artisan Bricks", "emoji": "🧱", "value": 5000},
-        {"name": "Diamond Hands", "emoji": "💎", "value": 7500},
-        {"name": "Crypto Punk", "emoji": "🤖", "value": 12000},
-        {"name": "Golden Ape", "emoji": "🦍", "value": 8500},
-        {"name": "Moon Rocket", "emoji": "🌙", "value": 6800},
-        {"name": "Bitcoin Lord", "emoji": "₿", "value": 14000},
-        {"name": "Snoop Dogg", "emoji": "🐕", "value": 1300},
-        {"name": "Torch", "emoji": "🔥", "value": 450},
-        {"name": "Ice Cream", "emoji": "🍦", "value": 420},
-        {"name": "Ghost Spirit", "emoji": "👻", "value": 600},
-        {"name": "Phoenix", "emoji": "🦅", "value": 800},
-        {"name": "Dragon Egg", "emoji": "🥚", "value": 1100},
-        {"name": "Magic Lamp", "emoji": "🪔", "value": 950},
-        {"name": "Pirate Ship", "emoji": "🏴‍☠️", "value": 700},
-        {"name": "Ring", "emoji": "💍", "value": 100},
-        {"name": "Cake", "emoji": "🎂", "value": 50},
-        {"name": "Rose", "emoji": "🌹", "value": 25},
-        {"name": "Teddy Bear", "emoji": "🧸", "value": 15},
-        {"name": "Magic Wand", "emoji": "🪄", "value": 200},
-        {"name": "Crystal Ball", "emoji": "🔮", "value": 180},
-        {"name": "Golden Key", "emoji": "🗝️", "value": 150},
-        {"name": "Crown", "emoji": "👑", "value": 300},
-        {"name": "Ruby", "emoji": "💎", "value": 250},
-        {"name": "Amulet", "emoji": "📿", "value": 120},
-        {"name": "Sword", "emoji": "⚔️", "value": 80},
-        {"name": "Shield", "emoji": "🛡️", "value": 90},
-        {"name": "Potion", "emoji": "🧪", "value": 60},
+        {"name":"Scared Cat","emoji":"🐱","value":16000},
+        {"name":"Mightly Arms","emoji":"💪","value":10000},
+        {"name":"Loot Bag","emoji":"🎒","value":9000},
+        {"name":"Artisan Bricks","emoji":"🧱","value":5000},
+        {"name":"Diamond Hands","emoji":"💎","value":7500},
+        {"name":"Crypto Punk","emoji":"🤖","value":12000},
+        {"name":"Golden Ape","emoji":"🦍","value":8500},
+        {"name":"Moon Rocket","emoji":"🌙","value":6800},
+        {"name":"Bitcoin Lord","emoji":"₿","value":14000},
+        {"name":"Snoop Dogg","emoji":"🐕","value":1300},
+        {"name":"Torch","emoji":"🔥","value":450},
+        {"name":"Ice Cream","emoji":"🍦","value":420},
+        {"name":"Ghost Spirit","emoji":"👻","value":600},
+        {"name":"Phoenix","emoji":"🦅","value":800},
+        {"name":"Dragon Egg","emoji":"🥚","value":1100},
+        {"name":"Magic Lamp","emoji":"🪔","value":950},
+        {"name":"Pirate Ship","emoji":"🏴‍☠️","value":700},
+        {"name":"Ring","emoji":"💍","value":100},
+        {"name":"Cake","emoji":"🎂","value":50},
+        {"name":"Rose","emoji":"🌹","value":25},
+        {"name":"Teddy Bear","emoji":"🧸","value":15},
+        {"name":"Magic Wand","emoji":"🪄","value":200},
+        {"name":"Crystal Ball","emoji":"🔮","value":180},
+        {"name":"Golden Key","emoji":"🗝️","value":150},
+        {"name":"Crown","emoji":"👑","value":300},
+        {"name":"Ruby","emoji":"💎","value":250},
+        {"name":"Amulet","emoji":"📿","value":120},
+        {"name":"Sword","emoji":"⚔️","value":80},
+        {"name":"Shield","emoji":"🛡️","value":90},
+        {"name":"Potion","emoji":"🧪","value":60},
     ]
     return jsonify(nfts)
 
 @flask_app.route('/api/buy_nft', methods=['POST'])
 def api_buy_nft():
-    data = request.json
-    uid, name, value, emoji = data['uid'], data['name'], data['value'], data['emoji']
+    d = request.json
+    uid, name, value, emoji = d['uid'], d['name'], d['value'], d['emoji']
     async def p():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
             r = await cur.fetchone()
             if not r or r[0] < value:
-                return jsonify({"error": "no_balance"})
+                return jsonify({"error":"no_balance"})
             await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (value, uid))
-            await db.execute("INSERT INTO inventory (user_id, item_name, item_value, item_emoji) VALUES (?,?,?,?)", (uid, name, value, emoji))
+            await db.execute("INSERT INTO inventory (user_id,item_name,item_value,item_emoji) VALUES (?,?,?,?)", (uid, name, value, emoji))
             await db.commit()
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
-            return jsonify({"success": True, "balance": (await cur.fetchone())[0]})
+            return jsonify({"success":True,"balance":(await cur.fetchone())[0]})
     return asyncio.new_event_loop().run_until_complete(p())
 
 @flask_app.route('/api/sell_nft', methods=['POST'])
 def api_sell_nft():
-    data = request.json
-    uid, name, value = data['uid'], data['name'], data['value']
+    d = request.json
+    uid, name, value = d['uid'], d['name'], d['value']
     async def p():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, name))
             item = await cur.fetchone()
             if not item:
-                return jsonify({"error": "not_found"})
+                return jsonify({"error":"not_found"})
             await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
             await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (value, uid))
             await db.commit()
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
-            return jsonify({"success": True, "balance": (await cur.fetchone())[0]})
+            return jsonify({"success":True,"balance":(await cur.fetchone())[0]})
     return asyncio.new_event_loop().run_until_complete(p())
 
 @flask_app.route('/api/upgrade', methods=['POST'])
 def api_upgrade():
-    data = request.json
-    uid, fr, to = data['uid'], data['from'], data['to']
+    d = request.json
+    uid, fr, to = d['uid'], d['from'], d['to']
     async def p():
         ratio = fr['value'] / to['value']
         chance = max(1, min(50, int(ratio * 100)))
@@ -153,24 +150,23 @@ def api_upgrade():
             cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, fr['name']))
             item = await cur.fetchone()
             if not item:
-                return jsonify({"error": "not_found"})
+                return jsonify({"error":"not_found"})
             won = random.randint(1, 100) <= chance
             if won:
                 await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
-                await db.execute("INSERT INTO inventory (user_id, item_name, item_value, item_emoji) VALUES (?,?,?,?)", (uid, to['name'], to['value'], to['emoji']))
+                await db.execute("INSERT INTO inventory (user_id,item_name,item_value,item_emoji) VALUES (?,?,?,?)", (uid, to['name'], to['value'], to['emoji']))
                 await db.commit()
-                return jsonify({"success": True, "won": True, "chance": chance})
+                return jsonify({"success":True,"won":True,"chance":chance})
             else:
                 await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
                 await db.commit()
-                return jsonify({"success": True, "won": False, "chance": chance})
+                return jsonify({"success":True,"won":False,"chance":chance})
     return asyncio.new_event_loop().run_until_complete(p())
 
 def run_flask():
     port = int(os.environ.get('PORT', 8000))
     flask_app.run(host='0.0.0.0', port=port)
 
-# ==================== БАЗА ДАННЫХ ====================
 async def init_db():
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute('''CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, balance INTEGER DEFAULT 0, ref_code TEXT UNIQUE, invited_by INTEGER, ref_earned INTEGER DEFAULT 0, last_daily TEXT, last_allornothing TEXT)''')
@@ -181,7 +177,6 @@ async def init_db():
         await db.execute('''CREATE TABLE IF NOT EXISTS processed_tx (tx_hash TEXT PRIMARY KEY)''')
         await db.commit()
 
-# ==================== TON ====================
 async def check_ton():
     try:
         async with aiohttp.ClientSession() as s:
@@ -191,7 +186,7 @@ async def check_ton():
     except:
         return []
 
-async def process_ton(bot: Bot):
+async def process_ton(bot):
     while True:
         try:
             for tx in await check_ton():
@@ -215,7 +210,6 @@ async def process_ton(bot: Bot):
         except: pass
         await asyncio.sleep(30)
 
-# ==================== ФУНКЦИИ ====================
 async def generate_ref_code(uid):
     code = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     async with aiosqlite.connect(DB_NAME) as db:
@@ -236,7 +230,6 @@ def main_kb():
         [KeyboardButton(text="📢 Канал", url="https://t.me/arcade_ludo")]
     ], resize_keyboard=True)
 
-# ==================== ХЕНДЛЕРЫ ====================
 async def start_cmd(message: types.Message, bot: Bot):
     uid = message.from_user.id
     async with aiosqlite.connect(DB_NAME) as db:
@@ -337,7 +330,7 @@ async def webapp_handler(message: types.Message, bot: Bot):
                 if rnd <= cur:
                     await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (val, uid))
                     await db.execute("INSERT INTO cases_opened (user_id, case_name, reward, reward_value) VALUES (?,?,?,?)", (uid, case, name, val))
-                    nft_emojis = {"Scared Cat": "🐱", "Mightly Arms": "💪", "Loot Bag": "🎒", "Artisan Bricks": "🧱"}
+                    nft_emojis = {"Scared Cat":"🐱","Mightly Arms":"💪","Loot Bag":"🎒","Artisan Bricks":"🧱"}
                     if name in nft_emojis:
                         await db.execute("INSERT INTO inventory (user_id, item_name, item_value, item_emoji) VALUES (?,?,?,?)", (uid, name, val, nft_emojis[name]))
                     await db.commit()
@@ -346,7 +339,6 @@ async def webapp_handler(message: types.Message, bot: Bot):
                     return
         await message.answer("case:error,unknown")
 
-# ==================== ЗАПУСК ====================
 async def main():
     logging.basicConfig(level=logging.INFO)
     await init_db()
@@ -356,4 +348,15 @@ async def main():
     try:
         bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
         print("✅ Бот создан")
-    exc
+    except Exception as e:
+        print(f"❌ Ошибка бота: {e}")
+        raise
+    dp = Dispatcher()
+    dp.message.register(start_cmd, Command("start"))
+    dp.message.register(webapp_handler, F.web_app_data)
+    asyncio.create_task(process_ton(bot))
+    print("🤖 Бот запущен!")
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
