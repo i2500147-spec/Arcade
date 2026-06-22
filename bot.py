@@ -22,7 +22,7 @@ CHANNEL_TAG = "arcade_ludo"
 OWNER_ID = 8131755675
 TON_WALLET = "UQAISFpye-QozqPlK1iX_qHPmYzEphSNalQsFojALxuLXpx6"
 STAR_PRICE_TON = 0.006
-WEBAPP_URL = "https://ТВОЙ_URL.railway.app"
+WEBAPP_URL = "arcade-production-65b2.up.railway.app"
 DB_NAME = "arcade.db"
 
 # ==================== FLASK ====================
