@@ -21,7 +21,7 @@ CHANNEL_TAG = "arcade_ludo"
 OWNER_ID = 8131755675
 TON_WALLET = "UQAISFpye-QozqPlK1iX_qHPmYzEphSNalQsFojALxuLXpx6"
 STAR_PRICE_TON = 0.006
-WEBAPP_URL = "https://arcade-ycih.onrender.com"
+WEBAPP_URL = "https://arcade-8ru7.onrender.com"
 DB_NAME = "arcade.db"
 
 flask_app = Flask(__name__, static_folder='webapp')
