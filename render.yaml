@@ -3,3 +3,6 @@ services:
     name: arcade
     runtime: docker
     plan: free
+    envVars:
+      - key: WEB_CONCURRENCY
+        value: "1"
