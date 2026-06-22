@@ -19,13 +19,12 @@ body {
     color: var(--white);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     min-height: 100vh;
-    padding-bottom: 90px;
+    padding-bottom: 80px;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
     overflow-x: hidden;
 }
 
-/* Шапка */
 .header {
     display: flex;
     justify-content: space-between;
@@ -37,14 +36,12 @@ body {
     top: 0;
     z-index: 50;
 }
-
 .header-left { display: flex; align-items: center; gap: 10px; }
 .avatar-circle {
     width: 36px; height: 36px;
-    background: var(--blue);
     border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: bold; font-size: 16px;
+    object-fit: cover;
+    background: var(--blue);
 }
 .logo { font-weight: bold; font-size: 18px; }
 
@@ -56,8 +53,7 @@ body {
 .star-icon { color: var(--gold); font-size: 18px; }
 .plus-btn { color: var(--blue); font-size: 20px; margin-left: 4px; }
 
-/* Страницы */
-.page { display: none; padding: 16px; animation: fade 0.25s; }
+.page { display: none; padding: 16px; animation: fade 0.3s ease; }
 .page.active { display: block; }
 .page.fullscreen {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -67,7 +63,7 @@ body {
 .page.fullscreen.active { display: flex; }
 
 @keyframes fade {
-    from { opacity: 0; transform: translateY(6px); }
+    from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
@@ -76,16 +72,14 @@ body {
     font-size: 24px; color: var(--gray); cursor: pointer; z-index: 10;
 }
 
-.section-title { font-size: 20px; font-weight: bold; margin: 16px 0 10px; color: var(--white); }
+.section-title { font-size: 20px; font-weight: bold; margin: 16px 0 10px; }
 .sub-text { font-size: 14px; color: var(--gray); margin-bottom: 12px; }
 
-/* Кнопки */
 .btn-blue {
     width: 100%; padding: 14px;
     background: var(--blue); color: #fff;
     border: none; border-radius: var(--radius);
     font-size: 15px; font-weight: bold; cursor: pointer;
-    transition: background 0.2s;
 }
 .btn-blue:active { background: var(--blue2); }
 
@@ -105,7 +99,6 @@ input {
 }
 input:focus { border-color: var(--blue); }
 
-/* Главная */
 .game-grid { display: flex; gap: 10px; margin-bottom: 12px; }
 .game-card {
     flex: 1; padding: 24px 12px;
@@ -115,7 +108,6 @@ input:focus { border-color: var(--blue); }
     transition: all 0.2s;
 }
 .game-card.blue { border-left: 3px solid var(--blue); }
-.game-card.wide { flex: 1; }
 .game-card:active { border-color: var(--blue); transform: scale(0.97); }
 .game-icon { font-size: 32px; }
 .game-label { font-size: 13px; color: var(--gray); }
@@ -123,62 +115,62 @@ input:focus { border-color: var(--blue); }
 .free-case {
     display: flex; align-items: center; gap: 10px;
     background: var(--card); border: 1px solid var(--gold);
-    border-radius: var(--radius); padding: 14px;
-    cursor: pointer; margin-bottom: 12px;
+    border-radius: var(--radius); padding: 14px; cursor: pointer; margin-bottom: 12px;
 }
 .free-icon { font-size: 28px; }
 
-.cases-scroll {
-    display: flex; gap: 8px; overflow-x: auto;
-    padding-bottom: 8px; margin-bottom: 12px;
-}
+.case-category { margin-bottom: 14px; }
+.cat-name { font-size: 14px; color: var(--gold); margin-bottom: 8px; font-weight: bold; }
+.cases-row { display: flex; gap: 8px; }
 .case-mini {
-    min-width: 90px; padding: 12px 8px;
+    flex: 1; padding: 14px 10px;
     background: var(--card); border: 1px solid var(--border);
     border-radius: var(--radius); text-align: center; cursor: pointer;
-    font-size: 12px; flex-shrink: 0;
+    font-size: 13px; transition: all 0.2s;
 }
-.case-mini:active { border-color: var(--blue); }
+.case-mini:active { border-color: var(--blue); transform: scale(0.97); }
+.case-mini span { display: block; }
+.case-mini span:last-child { color: var(--gold); font-weight: bold; margin-top: 4px; }
 
-/* Краш */
-.crash-game {
-    width: 100%; height: 100%;
-    display: flex; flex-direction: column;
-    padding: 50px 16px 16px;
-}
+.crash-game { width: 100%; height: 100%; display: flex; flex-direction: column; padding: 50px 16px 16px; }
 .crash-graph {
     flex: 1; background: var(--card); border-radius: var(--radius);
     display: flex; align-items: center; justify-content: center;
-    position: relative; overflow: hidden;
 }
-.crash-multiplier {
-    font-size: 48px; font-weight: bold; color: var(--gold);
-    z-index: 2;
-}
+.crash-multiplier { font-size: 48px; font-weight: bold; color: var(--gold); }
 .crash-bet-area { display: flex; gap: 8px; margin-top: 12px; }
 .crash-bet-area input { flex: 2; }
-.crash-bet-area .btn-blue { flex: 1; }
-.crash-bet-area .btn-gold { flex: 1; }
+.crash-bet-area .btn-blue, .crash-bet-area .btn-gold { flex: 1; }
 
-/* Слоты */
 .slots-game { width: 100%; height: 100%; padding: 50px 16px 16px; overflow-y: auto; }
 .slot-tabs { display: flex; gap: 4px; background: var(--card); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
 .slot-tab {
     flex: 1; padding: 10px; border: none; background: none;
     color: var(--gray); font-size: 13px; border-radius: 8px; cursor: pointer;
 }
-.slot-tab.active { background: var(--blue); color: #fff; font-weight: bold; }
+.slot-tab.active { color: #fff; font-weight: bold; }
+.slot-tab:nth-child(1).active { background: var(--blue); }
+.slot-tab:nth-child(2).active { background: var(--red); }
+.slot-tab:nth-child(3).active { background: var(--gold); }
 
-.slot-machine-cs2 {
+.slot-reels {
     display: flex; gap: 6px; justify-content: center;
-    margin-bottom: 16px; height: 140px; overflow: hidden;
+    margin-bottom: 12px; height: 140px;
     background: var(--card); border-radius: var(--radius); padding: 10px;
+    border: 2px solid var(--blue);
 }
 .slot-reel {
     width: 90px; height: 120px;
     background: var(--border); border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 40px; transition: transform 0.1s;
+    font-size: 40px; transition: all 0.1s;
+}
+
+.slot-loot { margin-bottom: 12px; }
+.loot-row {
+    display: flex; justify-content: space-between;
+    padding: 8px 12px; background: var(--card); border-radius: 8px;
+    margin-bottom: 4px; font-size: 13px; color: var(--gray);
 }
 
 .slot-multipliers { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -189,7 +181,9 @@ input:focus { border-color: var(--blue); }
 }
 .mult-btn.active { border-color: var(--blue); color: var(--blue); }
 
-/* Рефералы */
+.case-open-container { text-align: center; padding-top: 80px; }
+.case-reel { font-size: 100px; transition: transform 0.1s; }
+
 .ref-card { background: var(--card); border-radius: var(--radius); padding: 20px; text-align: center; }
 .copy-btn {
     width: 100%; padding: 16px; background: #fff; color: #000;
@@ -198,12 +192,10 @@ input:focus { border-color: var(--blue); }
 .ref-hint { font-size: 12px; color: var(--gray); margin: 12px 0; }
 .ref-earned { font-weight: bold; color: var(--gold); font-size: 16px; }
 
-/* Лидерборд */
 #leaderboard-list { display: flex; flex-direction: column; gap: 6px; }
 .lb-row {
     display: flex; align-items: center; gap: 10px;
-    background: var(--card); padding: 12px; border-radius: var(--radius);
-    font-size: 14px;
+    background: var(--card); padding: 12px; border-radius: var(--radius); font-size: 14px;
 }
 .lb-place { width: 28px; font-weight: bold; color: var(--gold); }
 .lb-avatar {
@@ -213,7 +205,6 @@ input:focus { border-color: var(--blue); }
 .lb-name { flex: 1; }
 .lb-amount { color: var(--gold); font-weight: bold; }
 
-/* Инвентарь */
 .empty { text-align: center; color: var(--gray); padding: 40px; }
 .inv-item {
     display: flex; align-items: center; gap: 10px;
@@ -227,13 +218,11 @@ input:focus { border-color: var(--blue); }
     padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px;
 }
 
-/* Магазин */
 #shop-list { display: flex; flex-direction: column; gap: 6px; }
 .shop-item {
     display: flex; align-items: center; gap: 10px;
     background: var(--card); padding: 12px; border-radius: var(--radius); cursor: pointer;
 }
-.shop-item:active { border: 1px solid var(--blue); }
 .shop-emoji { font-size: 28px; }
 .shop-name { flex: 1; }
 .shop-price { color: var(--gold); font-weight: bold; }
@@ -242,7 +231,6 @@ input:focus { border-color: var(--blue); }
     padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px;
 }
 
-/* Апгрейд */
 .upgrade-circle {
     width: 120px; height: 120px; border-radius: 50%;
     border: 4px solid var(--blue); margin: 20px auto;
@@ -252,11 +240,9 @@ input:focus { border-color: var(--blue); }
 .upgrade-select { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
 .upgrade-select span { text-align: center; color: var(--gray); padding: 4px; }
 
-/* Пополнение */
 #page-deposit { padding: 50px 16px 16px; }
 #wallet-status { text-align: center; color: var(--gray); margin: 8px 0; font-size: 13px; }
 
-/* Нижняя панель */
 .bottom-nav {
     position: fixed; bottom: 0; left: 0; width: 100%;
     display: flex; background: var(--card); border-top: 1px solid var(--border);
@@ -264,8 +250,6 @@ input:focus { border-color: var(--blue); }
 }
 .nav-btn {
     flex: 1; font-size: 22px; background: none; border: none;
-    cursor: pointer; padding: 4px; opacity: 0.4; transition: all 0.2s;
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    cursor: pointer; padding: 4px; opacity: 0.4; transition: all 0.3s;
 }
-.nav-btn.active { opacity: 1; }
-.nav-label { font-size: 9px; color: var(--gray); }
+.nav-btn.active { opacity: 1; transform: scale(1.1); }
