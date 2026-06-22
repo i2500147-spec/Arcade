@@ -1,0 +1,5 @@
+services:
+  - type: web
+    name: arcade
+    runtime: docker
+    plan: free
