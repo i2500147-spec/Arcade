@@ -3,8 +3,6 @@ import logging
 import json
 import os
 import sys
-print(f"Python: {sys.version}")
-print(f"Импорты OK")
 from datetime import datetime
 from threading import Thread
 from flask import Flask, send_from_directory, request, jsonify
@@ -18,9 +16,11 @@ import aiohttp
 import random
 import string
 
+print(f"Python: {sys.version}")
+print("Импорты OK")
+
 # ==================== НАСТРОЙКИ ====================
 BOT_TOKEN = "8965870385:AAHZ_zppdEcBPIVl2DIdgNwds4z-BqYfv5A"
-print(f"Токен загружен: {BOT_TOKEN[:5]}...")
 BOT_USERNAME = "arcadecasinobot"
 CHANNEL_USERNAME = "@arcade_ludo"
 CHANNEL_TAG = "arcade_ludo"
@@ -353,13 +353,7 @@ async def main():
     print("✅ База готова")
     Thread(target=run_flask, daemon=True).start()
     print("🌐 Flask запущен")
-try:
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    print("✅ Бот создан")
-except Exception as e:
-    print(f"❌ Ошибка бота: {e}")
-    raise
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    dp = Dispatcher()
-    dp.message.register(start_cmd, Command("start"))
-    dp.message.register(webapp_handler, F.web_app_data)
+    try:
+        bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+        print("✅ Бот создан")
+    exc
