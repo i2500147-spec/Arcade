@@ -2,7 +2,6 @@ import asyncio
 import logging
 import json
 import os
-import sys
 from datetime import datetime
 from threading import Thread
 from flask import Flask, send_from_directory, request, jsonify
@@ -16,11 +15,8 @@ import aiohttp
 import random
 import string
 
-print(f"Python: {sys.version}")
-
 BOT_TOKEN = "8965870385:AAHZ_zppdEcBPIVl2DIdgNwds4z-BqYfv5A"
 BOT_USERNAME = "arcadecasinobot"
-CHANNEL_USERNAME = "@arcade_ludo"
 CHANNEL_TAG = "arcade_ludo"
 OWNER_ID = 8131755675
 TON_WALLET = "UQAISFpye-QozqPlK1iX_qHPmYzEphSNalQsFojALxuLXpx6"
@@ -44,8 +40,7 @@ def api_user(uid):
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT balance, ref_code, ref_earned FROM users WHERE user_id=?", (uid,))
             r = await cur.fetchone()
-            if r:
-                return jsonify({"balance": r[0], "ref_code": r[1], "ref_earned": r[2]})
+            if r: return jsonify({"balance": r[0], "ref_code": r[1], "ref_earned": r[2]})
             return jsonify({"balance": 0, "ref_code": "", "ref_earned": 0})
     return asyncio.new_event_loop().run_until_complete(get())
 
@@ -113,8 +108,7 @@ def api_buy_nft():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
             r = await cur.fetchone()
-            if not r or r[0] < value:
-                return jsonify({"error":"no_balance"})
+            if not r or r[0] < value: return jsonify({"error":"no_balance"})
             await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (value, uid))
             await db.execute("INSERT INTO inventory (user_id,item_name,item_value,item_emoji) VALUES (?,?,?,?)", (uid, name, value, emoji))
             await db.commit()
@@ -130,8 +124,7 @@ def api_sell_nft():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, name))
             item = await cur.fetchone()
-            if not item:
-                return jsonify({"error":"not_found"})
+            if not item: return jsonify({"error":"not_found"})
             await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
             await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (value, uid))
             await db.commit()
@@ -149,8 +142,7 @@ def api_upgrade():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, fr['name']))
             item = await cur.fetchone()
-            if not item:
-                return jsonify({"error":"not_found"})
+            if not item: return jsonify({"error":"not_found"})
             won = random.randint(1, 100) <= chance
             if won:
                 await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
@@ -183,8 +175,7 @@ async def check_ton():
             async with s.get(f"https://toncenter.com/api/v2/getTransactions?address={TON_WALLET}&limit=10", timeout=15) as r:
                 data = await r.json()
                 return data.get("result", []) if data.get("ok") else []
-    except:
-        return []
+    except: return []
 
 async def process_ton(bot):
     while True:
@@ -221,8 +212,7 @@ async def check_sub(bot, uid):
     try:
         m = await bot.get_chat_member(f"@{CHANNEL_TAG}", uid)
         return m.status not in ['left', 'kicked']
-    except:
-        return False
+    except: return False
 
 def main_kb():
     return ReplyKeyboardMarkup(keyboard=[
@@ -236,8 +226,7 @@ async def start_cmd(message: types.Message, bot: Bot):
         await db.execute("INSERT OR IGNORE INTO users (user_id, username, first_name) VALUES (?,?,?)", (uid, message.from_user.username, message.from_user.first_name))
         cur = await db.execute("SELECT ref_code FROM users WHERE user_id=?", (uid,))
         r = await cur.fetchone()
-        if not r or not r[0]:
-            await generate_ref_code(uid)
+        if not r or not r[0]: await generate_ref_code(uid)
         args = message.text.split()
         if len(args) > 1 and args[1].startswith("ref_"):
             ref_code = args[1].replace("ref_", "")
@@ -345,12 +334,8 @@ async def main():
     print("✅ База готова")
     Thread(target=run_flask, daemon=True).start()
     print("🌐 Flask запущен")
-    try:
-        bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-        print("✅ Бот создан")
-    except Exception as e:
-        print(f"❌ Ошибка бота: {e}")
-        raise
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    print("✅ Бот создан")
     dp = Dispatcher()
     dp.message.register(start_cmd, Command("start"))
     dp.message.register(webapp_handler, F.web_app_data)
