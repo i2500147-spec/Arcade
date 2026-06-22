@@ -37,6 +37,7 @@
         <div class="free-case" onclick="openFreeCase()">
             <span class="free-icon">📦</span>
             <span>Открыть</span>
+            <span style="margin-left:auto;color:var(--gray);font-size:12px;">24ч</span>
         </div>
         
         <div class="section-title">Кейсы</div>
@@ -69,8 +70,8 @@
                 <div class="crash-multiplier" id="crash-mult">1.00x</div>
             </div>
             <div class="crash-bet-area">
-                <input type="number" id="crash-bet" placeholder="Ставка">
-                <button class="btn-blue" onclick="startCrash()">Поставить</button>
+                <input type="number" id="crash-bet" placeholder="Ставка ⭐">
+                <button class="btn-blue" onclick="startCrash()">Ставка</button>
                 <button class="btn-gold" id="crash-cashout" onclick="cashout()" disabled>Забрать</button>
             </div>
         </div>
@@ -86,9 +87,9 @@
                 <button class="slot-tab" onclick="switchSlot('major')">Мажор</button>
             </div>
             <div class="slot-machine-cs2" id="slot-reels">
-                <div class="slot-reel" id="reel1"></div>
-                <div class="slot-reel" id="reel2"></div>
-                <div class="slot-reel" id="reel3"></div>
+                <div class="slot-reel" id="reel1">⭐</div>
+                <div class="slot-reel" id="reel2">⭐</div>
+                <div class="slot-reel" id="reel3">⭐</div>
             </div>
             <div class="slot-multipliers">
                 <button class="mult-btn active" onclick="setSlotMult(1)">x1</button>
@@ -99,17 +100,17 @@
         </div>
     </div>
 
-    <!-- Кейсы -->
-    <div id="page-cases" class="page">
-        <div class="close-btn" onclick="goPage('home')">←</div>
-        <div class="section-title" id="case-title">Кейс</div>
-        <div class="case-loot" id="case-loot"></div>
-        <div class="slot-machine-cs2" id="case-reels">
-            <div class="slot-reel" id="creel1"></div>
-        </div>
-        <div id="case-result" style="display:none;">
-            <div id="case-result-text"></div>
-            <button class="btn-blue" onclick="goPage('home')">Ок</button>
+    <!-- Кейс открытие -->
+    <div id="page-case-open" class="page fullscreen">
+        <div class="close-btn" onclick="closeCaseOpen()">✕</div>
+        <div class="case-open-container">
+            <div class="case-spin-area">
+                <div class="case-reel" id="case-reel">📦</div>
+            </div>
+            <div id="case-result-block" style="display:none;">
+                <div id="case-result-text"></div>
+                <button class="btn-gold" onclick="closeCaseOpen()">Забрать</button>
+            </div>
         </div>
     </div>
 
@@ -118,7 +119,7 @@
         <div class="section-title">Приглашай друзей</div>
         <p class="sub-text">Получай 5% с их проигрышей.</p>
         <div class="ref-card">
-            <button class="copy-btn" id="copy-btn" onclick="copyRef()">📋 Копировать ссылку</button>
+            <button class="copy-btn" onclick="copyRef()">📋 Копировать ссылку</button>
             <p class="ref-hint">Получайте 5% с трат людей перешедших по вашей ссылке</p>
             <div class="ref-earned">Всего заработано: <span id="ref-earned">0</span> ⭐</div>
         </div>
@@ -135,7 +136,7 @@
     <div id="page-inventory" class="page">
         <div class="section-title">Инвентарь</div>
         <div id="inventory-list"><p class="empty">Здесь пусто</p></div>
-        <button class="btn-blue" onclick="goPage('cases')">Открыть кейс</button>
+        <button class="btn-blue" onclick="goPage('home')">Открыть кейс</button>
     </div>
 
     <!-- Магазин -->
@@ -145,8 +146,8 @@
     </div>
 
     <!-- Апгрейд -->
-    <div id="page-upgrade" class="page">
-        <div class="close-btn" onclick="goPage('home')">←</div>
+    <div id="page-upgrade" class="page fullscreen">
+        <div class="close-btn" onclick="closeUpgrade()">✕</div>
         <div class="upgrade-circle">
             <span id="upgrade-chance">0%</span>
         </div>
@@ -173,7 +174,7 @@
     <div class="bottom-nav">
         <button class="nav-btn active" onclick="goPage('ref')">👤<span class="nav-label">Рефералы</span></button>
         <button class="nav-btn" onclick="goPage('home')">🏠<span class="nav-label">Главное</span></button>
-        <button class="nav-btn" onclick="goPage('leaderboard')">🏆<span class="nav-label">Лидерборд</span></button>
+        <button class="nav-btn" onclick="goPage('leaderboard')">🏆<span class="nav-label">Рейтинг</span></button>
         <button class="nav-btn" onclick="goPage('inventory')">🎒<span class="nav-label">Инвентарь</span></button>
         <button class="nav-btn" onclick="goPage('shop')">🛒<span class="nav-label">Магазин</span></button>
     </div>
@@ -181,4 +182,4 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="app.js"></script>
 </body>
-            </html>
+                                                                       </html>
