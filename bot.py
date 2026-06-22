@@ -15,8 +15,8 @@ import aiohttp
 import random
 import string
 
-BOT_TOKEN = "8965870385:AAGnfMFfn80uQaACmXM_16p3df67kW2Lzj0"
-BOT_USERNAME = "arcadecasinobot"
+BOT_TOKEN = "8941049801:AAFQHjVBXnx_58ndwkskRTwEam0g5ZaZcb0"
+BOT_USERNAME = "arcadecasinorobot"
 CHANNEL_TAG = "arcade_ludo"
 OWNER_ID = 8131755675
 TON_WALLET = "UQAISFpye-QozqPlK1iX_qHPmYzEphSNalQsFojALxuLXpx6"
