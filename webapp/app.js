@@ -5,6 +5,7 @@ tg.ready();
 let userId = 0;
 let userAvatar = '';
 let currentCase = '';
+let opening = false;
 
 const initData = tg.initDataUnsafe;
 if (initData.user) {
@@ -23,6 +24,8 @@ function updateBalance(b) {
 }
 
 function goPage(page) {
+    if (opening && page !== 'opening') return;
+    
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const el = document.getElementById('page-' + page);
     if (el) el.classList.add('active');
@@ -54,27 +57,20 @@ function buyStars() {
     }
     
     tg.sendData(JSON.stringify({ action: 'pay', amount: amount }));
-    tg.showAlert('Открываю счёт...');
+    tg.showAlert('Счёт открыт в Telegram!');
     document.getElementById('amount-input').value = '';
 }
 
 function withdraw() {
     const amount = parseInt(document.getElementById('wd-amount').value);
-    const card = document.getElementById('wd-card').value;
     
     if (!amount || amount < 100) {
         tg.showAlert('Минимум: 100 ⭐');
         return;
     }
-    if (!card) {
-        tg.showAlert('Введите номер карты!');
-        return;
-    }
     
-    tg.sendData(JSON.stringify({ action: 'withdraw', amount: amount, card: card }));
-    tg.showAlert('Заявка отправлена!');
+    tg.sendData(JSON.stringify({ action: 'withdraw', amount: amount }));
     document.getElementById('wd-amount').value = '';
-    document.getElementById('wd-card').value = '';
 }
 
 function showCase(caseName) {
@@ -153,34 +149,48 @@ function showCase(caseName) {
 }
 
 function openCase() {
+    if (currentCase === 'daily') {
+        tg.sendData(JSON.stringify({ action: 'check_sub' }));
+    }
+    
+    opening = true;
     goPage('opening');
     document.getElementById('page-opening').classList.add('active');
-    document.getElementById('spinner').style.display = 'block';
-    document.getElementById('result').style.display = 'none';
     
-    const emojis = ['🎁', '💎', '⭐', '💫', '🪙', '👑', '💍', '🎉', '🔥', '🍦'];
-    const spinner = document.getElementById('spinner');
+    const track = document.getElementById('slot-track');
+    const resultBlock = document.getElementById('result-block');
     
-    let count = 0;
-    const interval = setInterval(() => {
-        spinner.innerHTML = `<div style="font-size:80px;">${emojis[Math.floor(Math.random() * emojis.length)]}</div>`;
-        count++;
-        
-        if (count > 25) {
-            clearInterval(interval);
-            
-            tg.sendData(JSON.stringify({ action: 'open_case', case: currentCase }));
-            
-            setTimeout(() => {
-                document.getElementById('spinner').style.display = 'none';
-                document.getElementById('result').style.display = 'block';
-                document.getElementById('result-icon').textContent = '🎉';
-                document.getElementById('result-text').textContent = 'Кейс открыт! Проверьте бота.';
-            }, 1500);
-        }
-    }, 80);
+    track.classList.remove('spinning');
+    resultBlock.style.display = 'none';
+    
+    void track.offsetWidth;
+    track.classList.add('spinning');
+    
+    tg.sendData(JSON.stringify({ action: 'open_case', case: currentCase }));
+    
+    setTimeout(() => {
+        track.classList.remove('spinning');
+        resultBlock.style.display = 'block';
+        document.getElementById('result-text').textContent = 'Ожидайте...';
+    }, 3200);
 }
 
+function closeOpening() {
+    if (opening) {
+        tg.showAlert('Дождитесь завершения!');
+        return;
+    }
+    goPage('cases');
+}
+
+function closeResult() {
+    opening = false;
+    document.getElementById('page-opening').classList.remove('active');
+    goPage('cases');
+    loadBalance();
+}
+
+// Обработка ответов от бота
 window.addEventListener('message', function(e) {
     try {
         const data = JSON.parse(e.data);
@@ -189,3 +199,54 @@ window.addEventListener('message', function(e) {
         }
     } catch(err) {}
 });
+
+// Перехватываем ответы из Telegram
+const origPostMessage = window.postMessage;
+window.postMessage = function(msg, origin) {
+    if (typeof msg === 'string' && msg.startsWith('balance:')) {
+        updateBalance(parseInt(msg.split(':')[1]));
+    }
+    if (typeof msg === 'string' && msg.startsWith('case:')) {
+        const parts = msg.split(':');
+        const status = parts[1];
+        
+        if (status === 'error') {
+            const errType = parts[2];
+            opening = false;
+            document.getElementById('page-opening').classList.remove('active');
+            
+            if (errType === 'not_subscribed') {
+                tg.showAlert('Подпишитесь на @arcadeludo!');
+            } else if (errType === 'already_opened') {
+                tg.showAlert('Вы уже открывали сегодня!');
+            } else if (errType === 'no_balance') {
+                tg.showAlert('Недостаточно звёзд!');
+            } else {
+                tg.showAlert('Ошибка!');
+            }
+            goPage('cases');
+        } else if (status === 'success') {
+            const name = parts[2];
+            const value = parts[3];
+            const newBal = parts[4];
+            
+            document.getElementById('result-text').innerHTML = `🎉 <b>${name}</b><br>💰 +${value} ⭐`;
+            updateBalance(parseInt(newBal));
+        }
+    }
+    if (typeof msg === 'string' && msg.startsWith('sub:')) {
+        // Ответ проверки подписки, кейс уже отправлен
+    }
+    if (typeof msg === 'string' && msg.startsWith('withdraw:')) {
+        const status = msg.split(':')[1];
+        if (status === 'ok') {
+            tg.showAlert('✅ Заявка создана! Ожидайте 24 часа.');
+            loadBalance();
+        } else if (status === 'min') {
+            tg.showAlert('❌ Минимум 100 ⭐');
+        } else if (status === 'no_balance') {
+            tg.showAlert('❌ Недостаточно звёзд!');
+        }
+    }
+    origPostMessage.call(this, msg, origin);
+};
