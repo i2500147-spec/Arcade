@@ -77,12 +77,20 @@ function deposit() {
     closeDeposit();
 }
 
+function usePromo() {
+    const code = document.getElementById('promo-code').value.trim().toUpperCase();
+    if (!code) { tg.showAlert('Введите промокод!'); return; }
+    tg.sendData(JSON.stringify({ action: 'promo', code: code }));
+    document.getElementById('promo-code').value = '';
+}
+
 function openCrash() { document.getElementById('page-crash').classList.add('active'); }
 function openSlots() {
     document.getElementById('page-slots').classList.add('active');
     updateSlotLoot();
 }
 function openUpgrade() { document.getElementById('page-upgrade').classList.add('active'); }
+function closeUpgrade() { document.getElementById('page-upgrade').classList.remove('active'); }
 
 function startCrash() {
     if (crashActive) return;
@@ -153,13 +161,7 @@ function spinSlots() {
     const price = prices[currentSlot] * slotMult;
     if (price > userBalance) { tg.showAlert('Недостаточно звёзд!'); return; }
     userBalance -= price; updateUI();
-    
-    const items = {
-        novice: ['⭐','⭐','⭐','⭐','💫'],
-        start: ['⭐','💫','💎','🔥','💰'],
-        major: ['🔥','💎']
-    };
-    
+    const items = { novice: ['⭐','⭐','⭐','⭐','💫'], start: ['⭐','💫','💎','🔥','💰'], major: ['🔥','💎'] };
     const reels = [document.getElementById('reel1'), document.getElementById('reel2'), document.getElementById('reel3')];
     let count = 0;
     const spin = setInterval(() => {
@@ -192,14 +194,26 @@ function animateCase() {
     }, 80);
 }
 
-function closeCaseOpen() { if (!openingCase) { document.getElementById('page-case-open').classList.remove('active'); goPage('home'); } }
+function closeCaseOpen() {
+    if (openingCase) return;
+    document.getElementById('page-case-open').classList.remove('active');
+    document.getElementById('case-result-block').style.display = 'none';
+    goPage('home');
+}
 
 async function loadInventory() {
     const res = await fetch(`${API}/inventory/${userId}`);
     const items = await res.json();
     const list = document.getElementById('inventory-list');
     if (!items.length) { list.innerHTML = '<p class="empty">Здесь пусто</p>'; return; }
-    list.innerHTML = items.map(i => `<div class="inv-item"><span class="inv-emoji">${i.emoji||'📦'}</span><span class="inv-name">${i.name}</span><span class="inv-value">${i.value}⭐</span><button class="inv-sell" onclick="sellNFT('${i.name}',${i.value})">Продать</button></div>`).join('');
+    list.innerHTML = items.map(i => `
+        <div class="inv-item">
+            <div class="nft-icon nft-${i.icon || 'default'}"></div>
+            <span class="inv-name">${i.name}</span>
+            <span class="inv-value">${i.value}⭐</span>
+            <button class="inv-sell" onclick="sellNFT('${i.name}',${i.value})">Продать</button>
+        </div>
+    `).join('');
 }
 
 async function sellNFT(name, value) {
@@ -211,16 +225,21 @@ async function sellNFT(name, value) {
 async function loadShop() {
     const res = await fetch(`${API}/shop`);
     const items = await res.json();
-    document.getElementById('shop-list').innerHTML = items.map(i => `<div class="shop-item"><span class="shop-emoji">${i.emoji}</span><span class="shop-name">${i.name}</span><span class="shop-price">${i.value}⭐</span><button class="shop-buy" onclick="buyNFT('${i.name}',${i.value},'${i.emoji}')">Купить</button></div>`).join('');
+    document.getElementById('shop-list').innerHTML = items.map(i => `
+        <div class="shop-item">
+            <div class="nft-icon nft-${i.icon}"></div>
+            <span class="shop-name">${i.name}</span>
+            <span class="shop-price">${i.value}⭐</span>
+            <button class="shop-buy" onclick="buyNFT('${i.name}',${i.value},'${i.icon}')">Купить</button>
+        </div>
+    `).join('');
 }
 
-async function buyNFT(name, value, emoji) {
-    const res = await fetch(`${API}/buy_nft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: userId, name, value, emoji }) });
+async function buyNFT(name, value, icon) {
+    const res = await fetch(`${API}/buy_nft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: userId, name, value, icon }) });
     const data = await res.json();
     if (data.success) { userBalance = data.balance; updateUI(); tg.showAlert('Куплено!'); } else tg.showAlert('Недостаточно звёзд!');
 }
-
-function closeUpgrade() { document.getElementById('page-upgrade').classList.remove('active'); }
 
 async function selectFromNFT() {
     const res = await fetch(`${API}/inventory/${userId}`); const items = await res.json();
@@ -281,6 +300,17 @@ window.postMessage = function(msg, origin) {
     }
     if (typeof msg === 'string' && msg.startsWith('ref:')) {
         refCode = msg.split(':')[1];
+    }
+    if (typeof msg === 'string' && msg.startsWith('promo:')) {
+        const s = msg.split(':')[1];
+        if (s === 'success') {
+            const stars = parseInt(msg.split(':')[2]);
+            userBalance += stars;
+            updateUI();
+            tg.showAlert(`+${stars}⭐!`);
+        } else {
+            tg.showAlert('Промокод недействителен!');
+        }
     }
     origPostMessage.call(this, msg, origin);
 };
