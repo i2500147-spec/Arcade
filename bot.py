@@ -160,10 +160,10 @@ def api_upgrade():
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.json
+    print(f"WEBHOOK RECEIVED: {json.dumps(data, indent=2)[:500]}")
     loop = asyncio.new_event_loop()
     loop.run_until_complete(process_update(data))
     return "OK"
-
 async def process_update(data):
     try:
         async with aiohttp.ClientSession() as s:
