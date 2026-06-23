@@ -42,7 +42,8 @@ def api_user(uid):
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT balance, ref_code, ref_earned FROM users WHERE user_id=?", (uid,))
             r = await cur.fetchone()
-            if r: return jsonify({"balance": r[0], "ref_code": r[1], "ref_earned": r[2]})
+            if r:
+                return jsonify({"balance": r[0], "ref_code": r[1], "ref_earned": r[2]})
             return jsonify({"balance": 0, "ref_code": "", "ref_earned": 0})
     return asyncio.new_event_loop().run_until_complete(get())
 
@@ -105,12 +106,16 @@ def api_shop():
 @flask_app.route('/api/buy_nft', methods=['POST'])
 def api_buy_nft():
     d = request.json
-    uid, name, value, icon = d['uid'], d['name'], d['value'], d['icon']
+    uid = d['uid']
+    name = d['name']
+    value = d['value']
+    icon = d['icon']
     async def p():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
             r = await cur.fetchone()
-            if not r or r[0] < value: return jsonify({"error":"no_balance"})
+            if not r or r[0] < value:
+                return jsonify({"error":"no_balance"})
             await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (value, uid))
             await db.execute("INSERT INTO inventory (user_id,item_name,item_value,item_icon) VALUES (?,?,?,?)", (uid, name, value, icon))
             await db.commit()
@@ -121,12 +126,15 @@ def api_buy_nft():
 @flask_app.route('/api/sell_nft', methods=['POST'])
 def api_sell_nft():
     d = request.json
-    uid, name, value = d['uid'], d['name'], d['value']
+    uid = d['uid']
+    name = d['name']
+    value = d['value']
     async def p():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, name))
             item = await cur.fetchone()
-            if not item: return jsonify({"error":"not_found"})
+            if not item:
+                return jsonify({"error":"not_found"})
             await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
             await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (value, uid))
             await db.commit()
@@ -137,14 +145,17 @@ def api_sell_nft():
 @flask_app.route('/api/upgrade', methods=['POST'])
 def api_upgrade():
     d = request.json
-    uid, fr, to = d['uid'], d['from'], d['to']
+    uid = d['uid']
+    fr = d['from']
+    to = d['to']
     async def p():
         ratio = fr['value'] / to['value']
         chance = max(1, min(50, int(ratio * 100)))
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, fr['name']))
             item = await cur.fetchone()
-            if not item: return jsonify({"error":"not_found"})
+            if not item:
+                return jsonify({"error":"not_found"})
             won = random.randint(1, 100) <= chance
             if won:
                 await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
@@ -160,10 +171,11 @@ def api_upgrade():
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.json
-    print(f"WEBHOOK RECEIVED: {json.dumps(data, indent=2)[:500]}")
+    print(f"WEBHOOK RECEIVED: {str(data)[:300]}")
     loop = asyncio.new_event_loop()
     loop.run_until_complete(process_update(data))
     return "OK"
+
 async def process_update(data):
     try:
         async with aiohttp.ClientSession() as s:
@@ -322,28 +334,27 @@ async def process_update(data):
                             await db.commit()
                     
                     cases = {
-    "daily": {"price": 0, "items": [
-        ("Scared Cat", 16000, 1), ("Mightly Arms", 10000, 1), ("Loot Bag", 9000, 2),
-        ("Artisan Bricks", 5000, 3), ("5 ⭐", 5, 30), ("1 ⭐", 1, 30), ("3 ⭐", 3, 33)
-    ]},
-    "valera": {"price": 3, "items": [("3 ⭐", 3, 50), ("5 ⭐", 5, 40), ("10 ⭐", 10, 10)]},
-    "bumzhikha": {"price": 5, "items": [("5 ⭐", 5, 50), ("15 ⭐", 15, 30), ("30 ⭐", 30, 16), ("50 ⭐", 50, 14)]},
-    "svidanie": {"price": 50, "items": [
-        ("5 ⭐", 5, 1), ("4 ⭐", 4, 2), ("3 ⭐", 3, 3), ("7 ⭐", 7, 4),
-        ("50 ⭐", 50, 40), ("75 ⭐", 75, 25), ("100 ⭐", 100, 20), ("200 ⭐", 200, 5)
-    ]},
-    "otel": {"price": 75, "items": [
-        ("5 ⭐", 5, 1), ("4 ⭐", 4, 2), ("3 ⭐", 3, 3), ("1 ⭐", 1, 4),
-        ("80 ⭐", 80, 50), ("150 ⭐", 150, 25), ("200 ⭐", 200, 15)
-    ]},
-    "forever": {"price": 300, "items": [
-        ("1 ⭐", 1, 1), ("10 ⭐", 10, 5), ("4 ⭐", 4, 4),
-        ("350 ⭐", 350, 50), ("400 ⭐", 400, 20), ("500 ⭐", 500, 15), ("1000 ⭐", 1000, 5)
-    ]},
-    "allornothing": {"price": 2000, "items": [("1000 ⭐", 1000, 50), ("5000 ⭐", 5000, 50)]}
-}
-
-c = cases.get(case)c = cases.get(case)
+                        "daily": {"price": 0, "items": [
+                            ("Scared Cat", 16000, 1), ("Mightly Arms", 10000, 1), ("Loot Bag", 9000, 2),
+                            ("Artisan Bricks", 5000, 3), ("5 ⭐", 5, 30), ("1 ⭐", 1, 30), ("3 ⭐", 3, 33)
+                        ]},
+                        "valera": {"price": 3, "items": [("3 ⭐", 3, 50), ("5 ⭐", 5, 40), ("10 ⭐", 10, 10)]},
+                        "bumzhikha": {"price": 5, "items": [("5 ⭐", 5, 50), ("15 ⭐", 15, 30), ("30 ⭐", 30, 16), ("50 ⭐", 50, 14)]},
+                        "svidanie": {"price": 50, "items": [
+                            ("5 ⭐", 5, 1), ("4 ⭐", 4, 2), ("3 ⭐", 3, 3), ("7 ⭐", 7, 4),
+                            ("50 ⭐", 50, 40), ("75 ⭐", 75, 25), ("100 ⭐", 100, 20), ("200 ⭐", 200, 5)
+                        ]},
+                        "otel": {"price": 75, "items": [
+                            ("5 ⭐", 5, 1), ("4 ⭐", 4, 2), ("3 ⭐", 3, 3), ("1 ⭐", 1, 4),
+                            ("80 ⭐", 80, 50), ("150 ⭐", 150, 25), ("200 ⭐", 200, 15)
+                        ]},
+                        "forever": {"price": 300, "items": [
+                            ("1 ⭐", 1, 1), ("10 ⭐", 10, 5), ("4 ⭐", 4, 4),
+                            ("350 ⭐", 350, 50), ("400 ⭐", 400, 20), ("500 ⭐", 500, 15), ("1000 ⭐", 1000, 5)
+                        ]},
+                        "allornothing": {"price": 2000, "items": [("1000 ⭐", 1000, 50), ("5000 ⭐", 5000, 50)]}
+                    }
+                    
                     c = cases.get(case)
                     if not c:
                         await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,not_found"})
