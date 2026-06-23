@@ -163,7 +163,7 @@ def webhook():
     loop.run_until_complete(process_update(data))
     return "OK"
     async def process_update(data):
-    try:
+        try:
         async with aiohttp.ClientSession() as s:
             msg = data.get('message', {})
             text = msg.get('text', '')
