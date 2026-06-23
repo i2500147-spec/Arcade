@@ -342,7 +342,9 @@ async def process_update(data):
                         ]},
                         "allornothing": {"price": 2000, "items": [("1000 ⭐", 1000, 50), ("5000 ⭐", 5000, 50)]}
                     await db.execute("CREATE TABLE IF NOT EXISTS inventory (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, item_name TEXT, item_value INTEGER, item_icon TEXT, obtained_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
-                    
+                    }
+
+c = cases.get(case)
                     c = cases.get(case)
                     if not c:
                         await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,not_found"})
