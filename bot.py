@@ -5,13 +5,6 @@ import random
 import sys
 import traceback
 import time
-import fcntl
-lock_file = open('/tmp/bot.lock', 'w')
-try:
-    fcntl.lockf(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-except IOError:
-    print("Another instance running, exiting")
-    sys.exit(0)
 from datetime import datetime
 from threading import Thread
 from flask import Flask, send_from_directory, request, jsonify
@@ -117,12 +110,16 @@ def api_shop():
 @flask_app.route('/api/buy_nft', methods=['POST'])
 def api_buy_nft():
     d = request.json
-    uid, name, value, icon = d['uid'], d['name'], d['value'], d['icon']
+    uid = d['uid']
+    name = d['name']
+    value = d['value']
+    icon = d['icon']
     async def p():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
             r = await cur.fetchone()
-            if not r or r[0] < value: return jsonify({"error":"no_balance"})
+            if not r or r[0] < value:
+                return jsonify({"error":"no_balance"})
             await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (value, uid))
             await db.execute("INSERT INTO inventory (user_id,item_name,item_value,item_icon) VALUES (?,?,?,?)", (uid, name, value, icon))
             await db.commit()
@@ -133,12 +130,15 @@ def api_buy_nft():
 @flask_app.route('/api/sell_nft', methods=['POST'])
 def api_sell_nft():
     d = request.json
-    uid, name, value = d['uid'], d['name'], d['value']
+    uid = d['uid']
+    name = d['name']
+    value = d['value']
     async def p():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, name))
             item = await cur.fetchone()
-            if not item: return jsonify({"error":"not_found"})
+            if not item:
+                return jsonify({"error":"not_found"})
             await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
             await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (value, uid))
             await db.commit()
@@ -149,14 +149,17 @@ def api_sell_nft():
 @flask_app.route('/api/upgrade', methods=['POST'])
 def api_upgrade():
     d = request.json
-    uid, fr, to = d['uid'], d['from'], d['to']
+    uid = d['uid']
+    fr = d['from']
+    to = d['to']
     async def p():
         ratio = fr['value'] / to['value']
         chance = max(1, min(50, int(ratio * 100)))
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT id FROM inventory WHERE user_id=? AND item_name=? LIMIT 1", (uid, fr['name']))
             item = await cur.fetchone()
-            if not item: return jsonify({"error":"not_found"})
+            if not item:
+                return jsonify({"error":"not_found"})
             won = random.randint(1, 100) <= chance
             if won:
                 await db.execute("DELETE FROM inventory WHERE id=?", (item[0],))
@@ -221,7 +224,8 @@ async def process_case(uid, case, s, chat_id):
     }
     
     c = cases.get(case)
-    if not c: return "case:error,not_found"
+    if not c:
+        return "case:error,not_found"
     
     async with aiosqlite.connect(DB_NAME) as db:
         cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
@@ -343,18 +347,20 @@ async def webapp_handler(message, bot):
         async with aiohttp.ClientSession() as s:
             result = await process_case(uid, case, s, message.chat.id)
         await message.answer(result)
-    
-    elif act and act.startswith('/promo') and uid == OWNER_ID:
-        parts = message.text.split() if hasattr(message, 'text') else []
-        if len(parts) == 4:
-            promo_code = parts[1].upper()
-            stars = int(parts[2])
-            uses = int(parts[3])
-            async with aiosqlite.connect(DB_NAME) as db:
-                await db.execute("CREATE TABLE IF NOT EXISTS promos (code TEXT PRIMARY KEY, stars INTEGER, uses_left INTEGER)")
-                await db.execute("INSERT OR REPLACE INTO promos VALUES (?,?,?)", (promo_code, stars, uses))
-                await db.commit()
-            await message.answer(f"✅ Промокод <b>{promo_code}</b> на {stars}⭐ ({uses} исп.) создан!", parse_mode=ParseMode.HTML)
+
+async def promo_cmd(message, bot):
+    if message.from_user.id != OWNER_ID:
+        return
+    parts = message.text.split()
+    if len(parts) == 4:
+        promo_code = parts[1].upper()
+        stars = int(parts[2])
+        uses = int(parts[3])
+        async with aiosqlite.connect(DB_NAME) as db:
+            await db.execute("CREATE TABLE IF NOT EXISTS promos (code TEXT PRIMARY KEY, stars INTEGER, uses_left INTEGER)")
+            await db.execute("INSERT OR REPLACE INTO promos VALUES (?,?,?)", (promo_code, stars, uses))
+            await db.commit()
+        await message.answer(f"✅ Промокод <b>{promo_code}</b> на {stars}⭐ ({uses} исп.) создан!", parse_mode=ParseMode.HTML)
 
 async def init_db():
     async with aiosqlite.connect(DB_NAME) as db:
@@ -379,6 +385,7 @@ async def main():
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     dp.message.register(start_cmd, Command("start"))
+    dp.message.register(promo_cmd, Command("promo"))
     dp.message.register(webapp_handler, F.web_app_data)
     print("Bot started - POLLING")
     await dp.start_polling(bot)
