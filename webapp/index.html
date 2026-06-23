@@ -19,28 +19,28 @@
 
     <div id="page-home" class="page active">
         <div class="game-grid">
-            <button class="game-card blue" onclick="openCrash()"><span>🚀</span><span>Краш</span></button>
-            <button class="game-card blue" onclick="openSlots()"><span>🎰</span><span>Слоты</span></button>
+            <button class="game-card" onclick="openCrash()"><span>🚀</span><span>Краш</span></button>
+            <button class="game-card" onclick="openSlots()"><span>🎰</span><span>Слоты</span></button>
         </div>
         <div class="section-title">Бесплатный кейс</div>
-        <div class="free-case" onclick="openFreeCase()"><span>📦</span><span>Открыть</span></div>
+        <div class="free-case" onclick="openFreeCase()"><span>📦</span><span>Открыть</span><span>24ч</span></div>
         <button class="btn-blue big" onclick="goPage('cases')">📦 Кейсы</button>
-        <div class="game-grid" style="margin-top:14px;">
-            <button class="game-card wide" onclick="openUpgrade()"><span>⚡</span><span>Апгрейд</span></button>
-            <button class="game-card wide" onclick="openDuel()"><span>⚔️</span><span>Дуэль</span></button>
+        <div class="game-grid" style="margin-top:12px;">
+            <button class="game-card" onclick="openUpgrade()"><span>⚡</span><span>Апгрейд</span></button>
+            <button class="game-card" onclick="openDuel()"><span>⚔️</span><span>Дуэль</span></button>
         </div>
     </div>
 
     <div id="page-cases" class="page">
         <div class="close-btn" onclick="goPage('home')">←</div>
         <div class="section-title">Кейсы</div>
-        <div class="case-category"><div class="cat-name">💸 Бомж</div></div>
+        <div class="cat-name">💸 Бомж</div>
         <div class="case-card" onclick="showCaseDetail('valera')"><span>👤</span><span>Валера</span><span>3⭐</span></div>
         <div class="case-card" onclick="showCaseDetail('bumzhikha')"><span>👩</span><span>Бомжиха</span><span>5⭐</span></div>
-        <div class="case-category"><div class="cat-name">🍽️ На поесть</div></div>
+        <div class="cat-name">🍽️ На поесть</div>
         <div class="case-card" onclick="showCaseDetail('svidanie')"><span>💝</span><span>Свидание</span><span>50⭐</span></div>
         <div class="case-card" onclick="showCaseDetail('otel')"><span>🏨</span><span>Отель</span><span>75⭐</span></div>
-        <div class="case-category"><div class="cat-name">👑 Рич</div></div>
+        <div class="cat-name">👑 Рич</div>
         <div class="case-card" onclick="showCaseDetail('forever')"><span>💎</span><span>Forever</span><span>300⭐</span></div>
         <div class="case-card" onclick="showCaseDetail('allornothing')"><span>🎰</span><span>Всё/ничего</span><span>2000⭐</span></div>
     </div>
@@ -56,7 +56,7 @@
             <div class="case-reels" id="case-reels"></div>
             <div id="case-result-block" style="display:none;">
                 <div id="case-result-text"></div>
-                <button class="btn-gold" onclick="closeCaseOpen()">Забрать</button>
+                <button class="btn-blue" onclick="closeCaseOpen()">Забрать</button>
             </div>
         </div>
     </div>
@@ -68,8 +68,8 @@
             <div class="crash-graph" id="crash-graph"></div>
             <div class="crash-bet-area">
                 <input type="number" id="crash-bet" placeholder="Ставка">
-                <button class="btn-blue big" onclick="startCrash()">Ставка</button>
-                <button class="btn-gold big" id="crash-cashout" onclick="cashout()" disabled>Забрать</button>
+                <button class="btn-blue" onclick="startCrash()">Ставка</button>
+                <button class="btn-blue" id="crash-cashout" onclick="cashout()" disabled>Забрать</button>
             </div>
         </div>
     </div>
@@ -95,17 +95,17 @@
 
     <div id="page-ref" class="page">
         <div class="section-title">Приглашай друзей</div>
-        <p>Получай 5% с их проигрышей.</p>
+        <p class="sub-text">Получай 5% с их проигрышей.</p>
         <div class="ref-card">
             <button class="copy-btn" onclick="copyRef()">📋 Копировать ссылку</button>
-            <p>5% с трат по вашей ссылке</p>
-            <div>Заработано: <span id="ref-earned">0</span> ⭐</div>
+            <p class="ref-hint">5% с трат по вашей ссылке</p>
+            <div class="ref-earned">Заработано: <span id="ref-earned">0</span> ⭐</div>
         </div>
     </div>
 
     <div id="page-leaderboard" class="page">
         <div class="section-title">Рейтинг</div>
-        <p>Топ 10 по оборотам за сутки</p>
+        <p class="sub-text">Топ 10 по оборотам за сутки</p>
         <div id="leaderboard-list"></div>
     </div>
 
@@ -131,10 +131,8 @@
                 <button class="btn-blue" onclick="selectFromNFT()">Апгрейдим</button>
                 <button class="btn-blue" onclick="selectToNFT()">Во что</button>
             </div>
-            <div class="upgrade-info">
-                <span id="from-nft">—</span><span>→</span><span id="to-nft">—</span>
-            </div>
-            <button class="btn-gold big" onclick="doUpgrade()">Апгрейд</button>
+            <div class="upgrade-info"><span id="from-nft">—</span><span>→</span><span id="to-nft">—</span></div>
+            <button class="btn-blue big" onclick="doUpgrade()">Апгрейд</button>
         </div>
     </div>
 
@@ -146,7 +144,7 @@
         <div style="height:20px;"></div>
         <div class="section-title">Промокод</div>
         <input type="text" id="promo-code" placeholder="Введите промокод">
-        <button class="btn-gold big" onclick="usePromo()">Активировать</button>
+        <button class="btn-blue big" onclick="usePromo()">Активировать</button>
     </div>
 
     <div class="bottom-nav">
@@ -160,4 +158,4 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="app.js"></script>
 </body>
-    </html>
+            </html>
