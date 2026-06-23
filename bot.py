@@ -45,7 +45,7 @@ def api_user(uid):
             if r: return jsonify({"balance": r[0], "ref_code": r[1], "ref_earned": r[2]})
             return jsonify({"balance": 0, "ref_code": "", "ref_earned": 0})
     retu
-rn asyncio.new_event_loop().run_until_complete(get())
+return asyncio.new_event_loop().run_until_complete(get())
 @flask_app.route('/api/inventory/<int:uid>')
 def api_inventory(uid):
     async def get():
