@@ -1,5 +1,5 @@
 const tg = window.Telegram.WebApp;
-tg.expand(); 
+tg.expand();
 tg.ready();
 
 let userId = 0;
@@ -15,6 +15,7 @@ let currentSlot = 'novice';
 let upgradeFrom = null;
 let upgradeTo = null;
 let openingCase = false;
+let currentCase = '';
 
 const API = 'https://arcade-8ru7.onrender.com/api';
 
@@ -55,19 +56,13 @@ function goPage(page) {
     if (page === 'ref') loadRefCode();
 }
 
-async function loadRefCode() {
-    if (refCode) return;
-    tg.sendData(JSON.stringify({ action: 'get_ref' }));
-}
-
+async function loadRefCode() { if (!refCode) tg.sendData(JSON.stringify({ action: 'get_ref' })); }
 function copyRef() {
-    const link = `https://t.me/arcadecasinobot?start=ref_${refCode}`;
-    navigator.clipboard.writeText(link).then(() => tg.showAlert('Скопировано!'));
+    navigator.clipboard.writeText(`https://t.me/arcadecasinobot?start=ref_${refCode}`).then(() => tg.showAlert('Скопировано!'));
 }
 
 function openDeposit() { document.getElementById('page-deposit').classList.add('active'); }
 function closeDeposit() { document.getElementById('page-deposit').classList.remove('active'); }
-function connectWallet() { document.getElementById('wallet-status').textContent = '✅ Подключен'; tg.showAlert('Готово!'); }
 
 function deposit() {
     const amount = parseInt(document.getElementById('dep-amount').value);
@@ -87,11 +82,13 @@ function usePromo() {
 function openCrash() { document.getElementById('page-crash').classList.add('active'); }
 function openSlots() {
     document.getElementById('page-slots').classList.add('active');
-    updateSlotLoot();
+    buildSlotReels();
 }
 function openUpgrade() { document.getElementById('page-upgrade').classList.add('active'); }
 function closeUpgrade() { document.getElementById('page-upgrade').classList.remove('active'); }
+function openDuel() { tg.showAlert('Дуэли скоро!'); }
 
+// ==================== КРАШ ====================
 function startCrash() {
     if (crashActive) return;
     const bet = parseInt(document.getElementById('crash-bet').value);
@@ -104,8 +101,17 @@ function startCrash() {
     crashInterval = setInterval(() => {
         crashMultiplier += 0.05;
         document.getElementById('crash-mult').textContent = crashMultiplier.toFixed(2) + 'x';
+        drawCrashGraph();
         if (Math.random() < 0.02 * crashMultiplier) endCrash(false);
     }, 200);
+}
+
+function drawCrashGraph() {
+    const graph = document.getElementById('crash-graph');
+    const bar = document.createElement('div');
+    bar.style.cssText = `width:4px;height:${Math.min(crashMultiplier*15,100)}px;background:#27ae60;display:inline-block;margin:1px;vertical-align:bottom`;
+    graph.appendChild(bar);
+    if (graph.children.length > 80) graph.removeChild(graph.firstChild);
 }
 
 function cashout() { if (crashActive) endCrash(true); }
@@ -113,6 +119,7 @@ function cashout() { if (crashActive) endCrash(true); }
 function endCrash(won) {
     clearInterval(crashInterval); crashActive = false;
     document.getElementById('crash-cashout').disabled = true;
+    document.getElementById('crash-graph').innerHTML = '';
     if (won) {
         const win = Math.floor(crashBet * crashMultiplier);
         userBalance += win;
@@ -132,28 +139,28 @@ function closeGame() {
     goPage('home');
 }
 
+// ==================== СЛОТЫ ====================
+function buildSlotReels() {
+    const count = slotMult * 3;
+    let html = '';
+    for (let i = 0; i < count; i++) html += '<div class="slot-reel">⭐</div>';
+    document.getElementById('slot-reels').innerHTML = html;
+}
+
 function switchSlot(type) {
     currentSlot = type;
     document.querySelectorAll('.slot-tab').forEach(t => t.classList.remove('active'));
     event.target.classList.add('active');
-    updateSlotLoot();
+    buildSlotReels();
     const colors = { novice: '#2d7dd2', start: '#c0392b', major: '#d4a843' };
     document.getElementById('slot-reels').style.borderColor = colors[type];
-}
-
-function updateSlotLoot() {
-    const loots = {
-        novice: [['⭐ 1 звезда',''], ['⭐ 3 звезды',''], ['⭐ 5 звёзд',''], ['⭐ 10 звёзд',''], ['⭐ 305 звёзд','']],
-        start: [['⭐ 1',''], ['⭐ 2',''], ['⭐ 3',''], ['⭐ 5',''], ['⭐ 10',''], ['⭐ 25',''], ['🔥 Нфт 305⭐',''], ['💎 Нфт 500⭐','']],
-        major: [['🔥 Нфт 305⭐',''], ['💎 Нфт 800⭐','']]
-    };
-    document.getElementById('slot-loot').innerHTML = loots[currentSlot].map(l => `<div class="loot-row"><span>${l[0]}</span></div>`).join('');
 }
 
 function setSlotMult(m) {
     slotMult = m;
     document.querySelectorAll('.mult-btn').forEach(b => b.classList.remove('active'));
     event.target.classList.add('active');
+    buildSlotReels();
 }
 
 function spinSlots() {
@@ -161,8 +168,9 @@ function spinSlots() {
     const price = prices[currentSlot] * slotMult;
     if (price > userBalance) { tg.showAlert('Недостаточно звёзд!'); return; }
     userBalance -= price; updateUI();
-    const items = { novice: ['⭐','⭐','⭐','⭐','💫'], start: ['⭐','💫','💎','🔥','💰'], major: ['🔥','💎'] };
-    const reels = [document.getElementById('reel1'), document.getElementById('reel2'), document.getElementById('reel3')];
+    
+    const items = { novice: ['⭐','💫','💎','🎁','💰'], start: ['⭐','💫','💎','🔥','💰','👑','💍','🎉'], major: ['🔥','💎'] };
+    const reels = document.querySelectorAll('.slot-reel');
     let count = 0;
     const spin = setInterval(() => {
         reels.forEach(r => r.textContent = items[currentSlot][Math.floor(Math.random() * items[currentSlot].length)]);
@@ -170,37 +178,61 @@ function spinSlots() {
         if (count > 30) {
             clearInterval(spin);
             const vals = { novice: [1,3,5,10,305], start: [1,2,3,5,10,25,305,500], major: [305,800] };
-            const result = vals[currentSlot][Math.floor(Math.random() * vals[currentSlot].length)];
-            userBalance += result * slotMult;
+            let totalWin = 0;
+            reels.forEach(() => totalWin += vals[currentSlot][Math.floor(Math.random() * vals[currentSlot].length)]);
+            userBalance += totalWin;
             updateUI();
-            tg.showAlert(`Выигрыш: ${result}⭐ x${slotMult}!`);
+            tg.showAlert(`Выигрыш: ${totalWin}⭐!`);
         }
     }, 80);
 }
 
-function openFreeCase() { if (!openingCase) { openingCase = true; animateCase(); tg.sendData(JSON.stringify({ action: 'open_case', case: 'daily' })); } }
-function openCase(name) { if (!openingCase) { openingCase = true; animateCase(); tg.sendData(JSON.stringify({ action: 'open_case', case: name })); } }
+// ==================== КЕЙСЫ ====================
+function showCaseDetail(name) {
+    currentCase = name;
+    const cases = {
+        valera: {icon:'👤',name:'Валера',price:3,items:['⭐ 3','⭐ 5','⭐ 10']},
+        bumzhikha: {icon:'👩',name:'Бомжиха',price:5,items:['⭐ 5','⭐ 15','⭐ 30','⭐ 50']},
+        svidanie: {icon:'💝',name:'Свидание',price:50,items:['⭐ 5','⭐ 4','⭐ 3','⭐ 7','⭐ 50','⭐ 75','⭐ 100','⭐ 200']},
+        otel: {icon:'🏨',name:'Отель',price:75,items:['⭐ 5','⭐ 4','⭐ 3','⭐ 1','⭐ 80','⭐ 150','⭐ 200']},
+        forever: {icon:'💎',name:'Forever',price:300,items:['⭐ 1','⭐ 10','⭐ 4','⭐ 350','⭐ 400','⭐ 500','⭐ 1000']},
+        allornothing: {icon:'🎰',name:'Всё или ничего',price:2000,items:['⭐ 1000','⭐ 5000']}
+    };
+    const c = cases[name];
+    document.getElementById('case-detail-content').innerHTML = `
+        <div style="text-align:center;font-size:60px;margin-bottom:12px;">${c.icon}</div>
+        <div style="text-align:center;font-size:22px;font-weight:bold;color:var(--gold);">${c.name}</div>
+        <div style="text-align:center;color:var(--gray);margin-bottom:16px;">${c.price}⭐</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:20px;">
+            ${c.items.map(i => `<div style="background:var(--border);padding:10px 14px;border-radius:10px;font-size:14px;">${i}</div>`).join('')}
+        </div>
+        <button class="btn-gold big" onclick="openCase('${name}')">Открыть</button>
+    `;
+    goPage('case-detail');
+}
 
-function animateCase() {
+function openFreeCase() { if (!openingCase) { openingCase = true; startCaseAnim(); tg.sendData(JSON.stringify({ action: 'open_case', case: 'daily' })); } }
+function openCase(name) { if (!openingCase) { openingCase = true; startCaseAnim(); tg.sendData(JSON.stringify({ action: 'open_case', case: name })); } }
+
+function startCaseAnim() {
     document.getElementById('page-case-open').classList.add('active');
     document.getElementById('case-result-block').style.display = 'none';
-    const reel = document.getElementById('case-reel');
-    const icons = ['📦','💎','⭐','💫','🔥','💰','👑','💍'];
-    let count = 0;
-    const spin = setInterval(() => {
-        reel.textContent = icons[Math.floor(Math.random() * icons.length)];
-        count++;
-        if (count > 25) clearInterval(spin);
-    }, 80);
+    document.getElementById('case-reels').innerHTML = '';
+    for (let i = 0; i < 5; i++) {
+        const reel = document.createElement('div');
+        reel.className = 'case-reel-item';
+        reel.textContent = ['📦','💎','⭐','💫','🔥','💰','👑'][Math.floor(Math.random()*7)];
+        document.getElementById('case-reels').appendChild(reel);
+    }
 }
 
 function closeCaseOpen() {
     if (openingCase) return;
     document.getElementById('page-case-open').classList.remove('active');
-    document.getElementById('case-result-block').style.display = 'none';
     goPage('home');
 }
 
+// ==================== ИНВЕНТАРЬ ====================
 async function loadInventory() {
     const res = await fetch(`${API}/inventory/${userId}`);
     const items = await res.json();
@@ -208,7 +240,7 @@ async function loadInventory() {
     if (!items.length) { list.innerHTML = '<p class="empty">Здесь пусто</p>'; return; }
     list.innerHTML = items.map(i => `
         <div class="inv-item">
-            <div class="nft-icon nft-${i.icon || 'default'}"></div>
+            <div class="nft-icon nft-${i.icon||'default'}"></div>
             <span class="inv-name">${i.name}</span>
             <span class="inv-value">${i.value}⭐</span>
             <button class="inv-sell" onclick="sellNFT('${i.name}',${i.value})">Продать</button>
@@ -222,6 +254,7 @@ async function sellNFT(name, value) {
     if (data.success) { userBalance = data.balance; updateUI(); tg.showAlert('Продано!'); loadInventory(); }
 }
 
+// ==================== МАГАЗИН ====================
 async function loadShop() {
     const res = await fetch(`${API}/shop`);
     const items = await res.json();
@@ -238,23 +271,26 @@ async function loadShop() {
 async function buyNFT(name, value, icon) {
     const res = await fetch(`${API}/buy_nft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: userId, name, value, icon }) });
     const data = await res.json();
-    if (data.success) { userBalance = data.balance; updateUI(); tg.showAlert('Куплено!'); } else tg.showAlert('Недостаточно звёзд!');
+    if (data.success) { userBalance = data.balance; updateUI(); tg.showAlert('Куплено!'); loadInventory(); }
+    else tg.showAlert('Недостаточно звёзд!');
 }
 
+// ==================== АПГРЕЙД ====================
 async function selectFromNFT() {
     const res = await fetch(`${API}/inventory/${userId}`); const items = await res.json();
-    if (items.length) { upgradeFrom = items[0]; document.getElementById('from-nft').textContent = items[0].name; updateUpgradeChance(); }
+    if (items.length) { upgradeFrom = items[0]; document.getElementById('from-nft').textContent = items[0].name; updateWheel(); }
 }
-
 async function selectToNFT() {
     const res = await fetch(`${API}/shop`); const items = await res.json();
-    if (items.length) { upgradeTo = items[0]; document.getElementById('to-nft').textContent = items[0].name; updateUpgradeChance(); }
+    if (items.length) { upgradeTo = items[0]; document.getElementById('to-nft').textContent = items[0].name; updateWheel(); }
 }
-
-function updateUpgradeChance() {
-    if (upgradeFrom && upgradeTo) document.getElementById('upgrade-chance').textContent = Math.max(1, Math.min(50, Math.floor(upgradeFrom.value / upgradeTo.value * 100))) + '%';
+function updateWheel() {
+    if (upgradeFrom && upgradeTo) {
+        const chance = Math.max(1, Math.min(50, Math.floor(upgradeFrom.value / upgradeTo.value * 100)));
+        document.getElementById('upgrade-chance').textContent = chance + '%';
+        document.querySelector('.wheel').style.setProperty('--p', chance + '%');
+    }
 }
-
 async function doUpgrade() {
     if (!upgradeFrom || !upgradeTo) { tg.showAlert('Выберите NFT!'); return; }
     const res = await fetch(`${API}/upgrade`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: userId, from: upgradeFrom, to: upgradeTo }) });
@@ -263,16 +299,17 @@ async function doUpgrade() {
     closeUpgrade();
 }
 
+// ==================== ЛИДЕРБОРД ====================
 async function loadLeaderboard() {
     const res = await fetch(`${API}/leaderboard`);
     const data = await res.json();
     const list = document.getElementById('leaderboard-list');
-    list.innerHTML = data.top.map((t, i) => `<div class="lb-row"><span class="lb-place">#${i+1}</span><div class="lb-avatar">${(t.name||'U')[0]}</div><span class="lb-name">${t.name||'User'}</span><span class="lb-amount">${t.total}⭐</span></div>`).join('');
-    list.innerHTML += `<p class="sub-text" style="margin-top:12px;">Всего выведено: ${data.total_withdrawn}⭐</p>`;
+    list.innerHTML = data.top.map((t, i) => `
+        <div class="lb-row"><span class="lb-place">#${i+1}</span><div class="lb-avatar">${(t.name||'U')[0]}</div><span class="lb-name">${t.name||'User'}</span><span class="lb-amount">${t.total}⭐</span></div>
+    `).join('');
 }
 
-function openDuel() { tg.showAlert('Дуэли скоро!'); }
-
+// ==================== ОБРАБОТКА ОТВЕТОВ ====================
 const origPostMessage = window.postMessage;
 window.postMessage = function(msg, origin) {
     if (typeof msg === 'string' && msg.startsWith('case:')) {
@@ -290,6 +327,11 @@ window.postMessage = function(msg, origin) {
             userBalance = parseInt(parts[4]); updateUI();
             document.getElementById('case-result-block').style.display = 'block';
             document.getElementById('case-result-text').innerHTML = `<b>${parts[2]}</b><br>+${parts[3]}⭐`;
+            setTimeout(() => {
+                document.getElementById('page-case-open').classList.remove('active');
+                document.getElementById('case-result-block').style.display = 'none';
+                goPage('home');
+            }, 3000);
         }
     }
     if (typeof msg === 'string' && msg.startsWith('withdraw:')) {
@@ -298,19 +340,11 @@ window.postMessage = function(msg, origin) {
         else if (s === 'min') tg.showAlert('❌ Минимум 100⭐');
         else if (s === 'no_balance') tg.showAlert('❌ Недостаточно звёзд!');
     }
-    if (typeof msg === 'string' && msg.startsWith('ref:')) {
-        refCode = msg.split(':')[1];
-    }
+    if (typeof msg === 'string' && msg.startsWith('ref:')) refCode = msg.split(':')[1];
     if (typeof msg === 'string' && msg.startsWith('promo:')) {
         const s = msg.split(':')[1];
-        if (s === 'success') {
-            const stars = parseInt(msg.split(':')[2]);
-            userBalance += stars;
-            updateUI();
-            tg.showAlert(`+${stars}⭐!`);
-        } else {
-            tg.showAlert('Промокод недействителен!');
-        }
+        if (s === 'success') { userBalance += parseInt(msg.split(':')[2]); updateUI(); tg.showAlert(`+${msg.split(':')[2]}⭐!`); }
+        else tg.showAlert('Промокод недействителен!');
     }
     origPostMessage.call(this, msg, origin);
 };
