@@ -164,7 +164,8 @@ def webhook():
     return "OK"
     async def process_update(data):
         try:        
-        async with aiohttp.ClientSession() as s:
+        try:
+    async with aiohttp.ClientSession() as s:
             msg = data.get('message', {})
             text = msg.get('text', '')
             chat_id = msg.get('chat', {}).get('id')
