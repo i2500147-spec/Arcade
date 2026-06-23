@@ -349,3 +349,67 @@ async def process_update(data):
                         return
                     
                     async with aiosqlite.connect(DB_NAME) as db:
+                        cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
+                        bal = (await cur.fetchone())[0]
+                        
+                        if c["price"] > 0 and bal < c["price"]:
+                            await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,no_balance"})
+                            return
+                        
+                        if c["price"] > 0:
+                            await db.execute("UPDATE users SET balance=balance-? WHERE user_id=?", (c["price"], uid))
+                        
+                        total = sum(it[2] for it in c["items"])
+                        rnd = random.randint(1, total)
+                        cur = 0
+                        for name, val, ch in c["items"]:
+                            cur += ch
+                            if rnd <= cur:
+                                await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (val, uid))
+                                await db.execute("INSERT INTO cases_opened (user_id, case_name, reward, reward_value) VALUES (?,?,?,?)", (uid, case, name, val))
+                                nft_icons = {"Scared Cat":"scared_cat","Mightly Arms":"mightly_arms","Loot Bag":"loot_bag","Artisan Bricks":"bricks"}
+                                if name in nft_icons:
+                                    await db.execute("INSERT INTO inventory (user_id, item_name, item_value, item_icon) VALUES (?,?,?,?)", (uid, name, val, nft_icons[name]))
+                                await db.commit()
+                                new_bal = (await (await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))).fetchone())[0]
+                                await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": f"case:success,{name},{val},{new_bal}"})
+                                return
+                    await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,unknown"})
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        traceback.print_exc()
+
+async def init_db():
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, balance INTEGER DEFAULT 0, ref_code TEXT UNIQUE, invited_by INTEGER, ref_earned INTEGER DEFAULT 0, last_daily TEXT, last_allornothing TEXT)")
+        await db.execute("CREATE TABLE IF NOT EXISTS deposits (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_ton REAL, amount_stars INTEGER, expected_amount REAL, comment TEXT UNIQUE, status TEXT DEFAULT 'waiting', tx_hash TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        await db.execute("CREATE TABLE IF NOT EXISTS withdrawals (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount_stars INTEGER, status TEXT DEFAULT 'pending', timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        await db.execute("CREATE TABLE IF NOT EXISTS inventory (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, item_name TEXT, item_value INTEGER, item_icon TEXT, obtained_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        await db.execute("CREATE TABLE IF NOT EXISTS cases_opened (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, case_name TEXT, reward TEXT, reward_value INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        await db.execute("CREATE TABLE IF NOT EXISTS processed_tx (tx_hash TEXT PRIMARY KEY)")
+        await db.execute("CREATE TABLE IF NOT EXISTS promos (code TEXT PRIMARY KEY, stars INTEGER, uses_left INTEGER)")
+        await db.commit()
+
+def set_webhook():
+    import requests
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={WEBAPP_URL}/webhook"
+    r = requests.get(url)
+    print(f"Webhook: {r.json()}")
+
+def run_flask():
+    port = int(os.environ.get('PORT', 8000))
+    flask_app.run(host='0.0.0.0', port=port)
+
+if __name__ == "__main__":
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(init_db())
+        print("DB OK")
+        set_webhook()
+        Thread(target=run_flask, daemon=True).start()
+        print("Flask + Webhook started")
+        while True:
+            time.sleep(60)
+    except Exception as e:
+        print(f"FATAL: {e}")
+        traceback.print_exc()
