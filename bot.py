@@ -5,6 +5,13 @@ import random
 import sys
 import traceback
 import time
+import fcntl
+lock_file = open('/tmp/bot.lock', 'w')
+try:
+    fcntl.lockf(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except IOError:
+    print("Another instance running, exiting")
+    sys.exit(0)
 from datetime import datetime
 from threading import Thread
 from flask import Flask, send_from_directory, request, jsonify
