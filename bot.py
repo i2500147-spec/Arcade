@@ -102,9 +102,9 @@ def api_shop():
     ]
     return jsonify(nfts)
     @flask_app.route('/api/buy_nft', methods=['POST'])
-def api_buy_nft():
-    d = request.json
-    uid, name, value, icon = d['uid'], d['name'], d['value'], d['icon']
+    def api_buy_nft():
+        d = request.json
+        uid, name, value, icon = d['uid'], d['name'], d['value'], d['icon']
     async def p():
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
