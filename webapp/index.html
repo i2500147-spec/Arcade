@@ -24,29 +24,8 @@
         </div>
         <div class="section-title">Бесплатный кейс</div>
         <div class="free-case" onclick="openFreeCase()"><span>📦</span><span>Открыть</span></div>
-        <div class="section-title">Категории</div>
-        <div class="case-category" onclick="goPage('cases')">
-            <div class="cat-name">💸 Бомж</div>
-            <div class="cases-row">
-                <div class="case-mini"><span>👤</span><span>Валера</span><span>3⭐</span></div>
-                <div class="case-mini"><span>👩</span><span>Бомжиха</span><span>5⭐</span></div>
-            </div>
-        </div>
-        <div class="case-category" onclick="goPage('cases')">
-            <div class="cat-name">🍽️ На поесть</div>
-            <div class="cases-row">
-                <div class="case-mini"><span>💝</span><span>Свидание</span><span>50⭐</span></div>
-                <div class="case-mini"><span>🏨</span><span>Отель</span><span>75⭐</span></div>
-            </div>
-        </div>
-        <div class="case-category" onclick="goPage('cases')">
-            <div class="cat-name">👑 Рич</div>
-            <div class="cases-row">
-                <div class="case-mini"><span>💎</span><span>Forever</span><span>300⭐</span></div>
-                <div class="case-mini"><span>🎰</span><span>Всё/ничего</span><span>2000⭐</span></div>
-            </div>
-        </div>
-        <div class="game-grid">
+        <button class="btn-blue big" onclick="goPage('cases')">📦 Кейсы</button>
+        <div class="game-grid" style="margin-top:14px;">
             <button class="game-card wide" onclick="openUpgrade()"><span>⚡</span><span>Апгрейд</span></button>
             <button class="game-card wide" onclick="openDuel()"><span>⚔️</span><span>Дуэль</span></button>
         </div>
@@ -99,10 +78,11 @@
         <div class="close-btn" onclick="closeGame()">✕</div>
         <div class="slots-game">
             <div class="slot-tabs">
-                <button class="slot-tab active" onclick="switchSlot('novice')">Новичок</button>
-                <button class="slot-tab" onclick="switchSlot('start')">Старт</button>
-                <button class="slot-tab" onclick="switchSlot('major')">Мажор</button>
+                <button class="slot-tab active" onclick="switchSlot('novice')">Новичок 3⭐</button>
+                <button class="slot-tab" onclick="switchSlot('start')">Старт 10⭐</button>
+                <button class="slot-tab" onclick="switchSlot('major')">Мажор 305⭐</button>
             </div>
+            <div class="slot-info" id="slot-info"></div>
             <div class="slot-reels" id="slot-reels"></div>
             <div class="slot-multipliers">
                 <button class="mult-btn active" onclick="setSlotMult(1)">x1</button>
@@ -132,7 +112,7 @@
     <div id="page-inventory" class="page">
         <div class="section-title">Инвентарь</div>
         <div id="inventory-list"><p class="empty">Здесь пусто</p></div>
-        <button class="btn-blue" onclick="goPage('home')">Открыть кейс</button>
+        <button class="btn-blue" onclick="goPage('cases')">Открыть кейс</button>
     </div>
 
     <div id="page-shop" class="page">
@@ -152,9 +132,7 @@
                 <button class="btn-blue" onclick="selectToNFT()">Во что</button>
             </div>
             <div class="upgrade-info">
-                <span id="from-nft">—</span>
-                <span>→</span>
-                <span id="to-nft">—</span>
+                <span id="from-nft">—</span><span>→</span><span id="to-nft">—</span>
             </div>
             <button class="btn-gold big" onclick="doUpgrade()">Апгрейд</button>
         </div>
