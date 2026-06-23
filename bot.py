@@ -30,8 +30,8 @@ def log_error(exc_type, exc_value, exc_tb):
 sys.excepthook = log_error
 print("Starting bot...")
 
-BOT_TOKEN = "8941049801:AAG2nZRdD-56HnQflA48bvZKrZ0_8lhdEOE"
-BOT_USERNAME = "arcadecasinobot"
+BOT_TOKEN = "8894875970:AAEZ6T_kSN9MJjs7mLapE-SohhJTaRcsZgM"
+BOT_USERNAME = "Casinoarcadebot"
 OWNER_ID = 8131755675
 TON_WALLET = "UQAISFpye-QozqPlK1iX_qHPmYzEphSNalQsFojALxuLXpx6"
 STAR_PRICE_TON = 0.006
