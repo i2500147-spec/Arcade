@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Arcade</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -13,55 +13,84 @@
             <span class="logo">Arcade</span>
         </div>
         <div class="balance-wrap" onclick="openDeposit()">
-            <span class="star-icon">★</span>
-            <span id="balance">0</span>
-            <span class="plus-btn">+</span>
+            <span>★</span><span id="balance">0</span><span class="plus-btn">+</span>
         </div>
     </div>
 
     <div id="page-home" class="page active">
         <div class="game-grid">
-            <button class="game-card blue" onclick="openCrash()"><span class="game-icon">🚀</span><span class="game-label">Краш</span></button>
-            <button class="game-card blue" onclick="openSlots()"><span class="game-icon">🎰</span><span class="game-label">Слоты</span></button>
+            <button class="game-card blue" onclick="openCrash()"><span>🚀</span><span>Краш</span></button>
+            <button class="game-card blue" onclick="openSlots()"><span>🎰</span><span>Слоты</span></button>
         </div>
         <div class="section-title">Бесплатный кейс</div>
-        <div class="free-case" onclick="openFreeCase()"><span class="free-icon">📦</span><span>Открыть</span><span style="margin-left:auto;color:var(--gray);font-size:12px;">24ч</span></div>
-        <div class="section-title">Кейсы</div>
-        <div class="case-category">
+        <div class="free-case" onclick="openFreeCase()"><span>📦</span><span>Открыть</span></div>
+        <div class="section-title">Категории</div>
+        <div class="case-category" onclick="goPage('cases')">
             <div class="cat-name">💸 Бомж</div>
             <div class="cases-row">
-                <div class="case-mini" onclick="openCase('valera')"><span>👤</span><span>Валера</span><span>3⭐</span></div>
-                <div class="case-mini" onclick="openCase('bumzhikha')"><span>👩</span><span>Бомжиха</span><span>5⭐</span></div>
+                <div class="case-mini"><span>👤</span><span>Валера</span><span>3⭐</span></div>
+                <div class="case-mini"><span>👩</span><span>Бомжиха</span><span>5⭐</span></div>
             </div>
         </div>
-        <div class="case-category">
+        <div class="case-category" onclick="goPage('cases')">
             <div class="cat-name">🍽️ На поесть</div>
             <div class="cases-row">
-                <div class="case-mini" onclick="openCase('svidanie')"><span>💝</span><span>Свидание</span><span>50⭐</span></div>
-                <div class="case-mini" onclick="openCase('otel')"><span>🏨</span><span>Отель</span><span>75⭐</span></div>
+                <div class="case-mini"><span>💝</span><span>Свидание</span><span>50⭐</span></div>
+                <div class="case-mini"><span>🏨</span><span>Отель</span><span>75⭐</span></div>
             </div>
         </div>
-        <div class="case-category">
+        <div class="case-category" onclick="goPage('cases')">
             <div class="cat-name">👑 Рич</div>
             <div class="cases-row">
-                <div class="case-mini" onclick="openCase('forever')"><span>💎</span><span>Forever</span><span>300⭐</span></div>
-                <div class="case-mini" onclick="openCase('allornothing')"><span>🎰</span><span>Всё/ничего</span><span>2000⭐</span></div>
+                <div class="case-mini"><span>💎</span><span>Forever</span><span>300⭐</span></div>
+                <div class="case-mini"><span>🎰</span><span>Всё/ничего</span><span>2000⭐</span></div>
             </div>
         </div>
         <div class="game-grid">
-            <button class="game-card wide" onclick="openUpgrade()"><span class="game-icon">⚡</span><span class="game-label">Апгрейд</span></button>
-            <button class="game-card wide" onclick="openDuel()"><span class="game-icon">⚔️</span><span class="game-label">Дуэль</span></button>
+            <button class="game-card wide" onclick="openUpgrade()"><span>⚡</span><span>Апгрейд</span></button>
+            <button class="game-card wide" onclick="openDuel()"><span>⚔️</span><span>Дуэль</span></button>
+        </div>
+    </div>
+
+    <div id="page-cases" class="page">
+        <div class="close-btn" onclick="goPage('home')">←</div>
+        <div class="section-title">Кейсы</div>
+        <div class="case-category"><div class="cat-name">💸 Бомж</div></div>
+        <div class="case-card" onclick="showCaseDetail('valera')"><span>👤</span><span>Валера</span><span>3⭐</span></div>
+        <div class="case-card" onclick="showCaseDetail('bumzhikha')"><span>👩</span><span>Бомжиха</span><span>5⭐</span></div>
+        <div class="case-category"><div class="cat-name">🍽️ На поесть</div></div>
+        <div class="case-card" onclick="showCaseDetail('svidanie')"><span>💝</span><span>Свидание</span><span>50⭐</span></div>
+        <div class="case-card" onclick="showCaseDetail('otel')"><span>🏨</span><span>Отель</span><span>75⭐</span></div>
+        <div class="case-category"><div class="cat-name">👑 Рич</div></div>
+        <div class="case-card" onclick="showCaseDetail('forever')"><span>💎</span><span>Forever</span><span>300⭐</span></div>
+        <div class="case-card" onclick="showCaseDetail('allornothing')"><span>🎰</span><span>Всё/ничего</span><span>2000⭐</span></div>
+    </div>
+
+    <div id="page-case-detail" class="page">
+        <div class="close-btn" onclick="goPage('cases')">←</div>
+        <div id="case-detail-content"></div>
+    </div>
+
+    <div id="page-case-open" class="page fullscreen">
+        <div class="close-btn" onclick="closeCaseOpen()">✕</div>
+        <div class="case-open-container">
+            <div class="case-reels" id="case-reels"></div>
+            <div id="case-result-block" style="display:none;">
+                <div id="case-result-text"></div>
+                <button class="btn-gold" onclick="closeCaseOpen()">Забрать</button>
+            </div>
         </div>
     </div>
 
     <div id="page-crash" class="page fullscreen">
         <div class="close-btn" onclick="closeGame()">✕</div>
         <div class="crash-game">
-            <div class="crash-graph"><div class="crash-multiplier" id="crash-mult">1.00x</div></div>
+            <div class="crash-multiplier" id="crash-mult">1.00x</div>
+            <div class="crash-graph" id="crash-graph"></div>
             <div class="crash-bet-area">
                 <input type="number" id="crash-bet" placeholder="Ставка">
-                <button class="btn-blue" onclick="startCrash()">Ставка</button>
-                <button class="btn-gold" id="crash-cashout" onclick="cashout()" disabled>Забрать</button>
+                <button class="btn-blue big" onclick="startCrash()">Ставка</button>
+                <button class="btn-gold big" id="crash-cashout" onclick="cashout()" disabled>Забрать</button>
             </div>
         </div>
     </div>
@@ -74,45 +103,29 @@
                 <button class="slot-tab" onclick="switchSlot('start')">Старт</button>
                 <button class="slot-tab" onclick="switchSlot('major')">Мажор</button>
             </div>
-            <div class="slot-reels" id="slot-reels">
-                <div class="slot-reel" id="reel1">⭐</div>
-                <div class="slot-reel" id="reel2">💎</div>
-                <div class="slot-reel" id="reel3">🔥</div>
-            </div>
-            <div class="slot-loot" id="slot-loot"></div>
+            <div class="slot-reels" id="slot-reels"></div>
             <div class="slot-multipliers">
                 <button class="mult-btn active" onclick="setSlotMult(1)">x1</button>
                 <button class="mult-btn" onclick="setSlotMult(2)">x2</button>
                 <button class="mult-btn" onclick="setSlotMult(3)">x3</button>
             </div>
-            <button class="btn-blue" onclick="spinSlots()">Крутить</button>
-        </div>
-    </div>
-
-    <div id="page-case-open" class="page fullscreen">
-        <div class="close-btn" onclick="closeCaseOpen()">✕</div>
-        <div class="case-open-container">
-            <div class="case-reel" id="case-reel">📦</div>
-            <div id="case-result-block" style="display:none;">
-                <div id="case-result-text"></div>
-                <button class="btn-gold" onclick="closeCaseOpen()">Забрать</button>
-            </div>
+            <button class="btn-blue big" onclick="spinSlots()">Крутить</button>
         </div>
     </div>
 
     <div id="page-ref" class="page">
         <div class="section-title">Приглашай друзей</div>
-        <p class="sub-text">Получай 5% с их проигрышей.</p>
+        <p>Получай 5% с их проигрышей.</p>
         <div class="ref-card">
             <button class="copy-btn" onclick="copyRef()">📋 Копировать ссылку</button>
-            <p class="ref-hint">5% с трат по вашей ссылке</p>
-            <div class="ref-earned">Заработано: <span id="ref-earned">0</span> ⭐</div>
+            <p>5% с трат по вашей ссылке</p>
+            <div>Заработано: <span id="ref-earned">0</span> ⭐</div>
         </div>
     </div>
 
     <div id="page-leaderboard" class="page">
         <div class="section-title">Рейтинг</div>
-        <p class="sub-text">Топ 10 по оборотам за сутки</p>
+        <p>Топ 10 по оборотам за сутки</p>
         <div id="leaderboard-list"></div>
     </div>
 
@@ -129,23 +142,33 @@
 
     <div id="page-upgrade" class="page fullscreen">
         <div class="close-btn" onclick="closeUpgrade()">✕</div>
-        <div class="upgrade-circle"><span id="upgrade-chance">0%</span></div>
-        <div class="upgrade-select">
-            <button class="btn-blue" onclick="selectFromNFT()">Что апгрейдим</button>
-            <span id="from-nft">—</span>
-            <button class="btn-blue" onclick="selectToNFT()">Во что</button>
-            <span id="to-nft">—</span>
+        <div class="upgrade-container">
+            <div class="wheel" id="upgrade-wheel">
+                <div class="wheel-pointer">▼</div>
+                <div class="wheel-chance" id="upgrade-chance">0%</div>
+            </div>
+            <div class="upgrade-buttons">
+                <button class="btn-blue" onclick="selectFromNFT()">Апгрейдим</button>
+                <button class="btn-blue" onclick="selectToNFT()">Во что</button>
+            </div>
+            <div class="upgrade-info">
+                <span id="from-nft">—</span>
+                <span>→</span>
+                <span id="to-nft">—</span>
+            </div>
+            <button class="btn-gold big" onclick="doUpgrade()">Апгрейд</button>
         </div>
-        <button class="btn-gold" onclick="doUpgrade()">Апгрейд</button>
     </div>
 
     <div id="page-deposit" class="page fullscreen">
         <div class="close-btn" onclick="closeDeposit()">✕</div>
-        <div class="section-title">Пополнить через TON</div>
-        <button class="btn-blue" onclick="connectWallet()">Подключить кошелёк</button>
-        <div id="wallet-status">Не подключен</div>
+        <div class="section-title">Пополнить</div>
         <input type="number" id="dep-amount" placeholder="Сколько звёзд?">
-        <button class="btn-gold" onclick="deposit()">Оплатить</button>
+        <button class="btn-blue big" onclick="deposit()">Пополнить через TON</button>
+        <div style="height:20px;"></div>
+        <div class="section-title">Промокод</div>
+        <input type="text" id="promo-code" placeholder="Введите промокод">
+        <button class="btn-gold big" onclick="usePromo()">Активировать</button>
     </div>
 
     <div class="bottom-nav">
@@ -159,4 +182,4 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="app.js"></script>
 </body>
-                                                                                                               </html>
+    </html>
