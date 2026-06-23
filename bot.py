@@ -221,11 +221,10 @@ async def webapp_handler(message, bot):
             if not r or not r[0]:
                 await db.execute("UPDATE users SET ref_code=? WHERE user_id=?", (code, uid))
                 await db.commit()
-        await message.answer(f"ref:{code}")
-    
-     act == "promo":
-        promo = data.get("code", "").upper()
-        async with aiosqlite.connect(DB_NAME) as db:
+        
+elif act == "promo":
+    promo = data.get("code", "").upper()
+    async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT stars, uses_left FROM promos WHERE code=? AND uses_left>0", (promo,))
             r = await cur.fetchone()
             if r:
