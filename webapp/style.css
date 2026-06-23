@@ -1,15 +1,15 @@
 :root {
-    --bg: #0a0e14;
-    --card: #12171f;
-    --border: #1e2733;
-    --blue: #2d7dd2;
-    --blue2: #1a5fa8;
-    --gold: #d4a843;
-    --white: #e0e0e0;
-    --gray: #6b7280;
-    --red: #c0392b;
-    --green: #27ae60;
-    --radius: 14px;
+    --bg: #0a0e17;
+    --card: #111827;
+    --border: #1e293b;
+    --blue: #3b82f6;
+    --blue-light: #60a5fa;
+    --blue-dark: #1d4ed8;
+    --white: #e2e8f0;
+    --gray: #64748b;
+    --green: #22c55e;
+    --red: #ef4444;
+    --radius: 12px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -19,18 +19,17 @@ body {
     color: var(--white);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     min-height: 100vh;
-    padding-bottom: 90px;
+    padding-bottom: 85px;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
     overflow-x: hidden;
-    font-size: 16px;
 }
 
 .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 14px 16px;
+    padding: 12px 16px;
     background: var(--card);
     border-bottom: 1px solid var(--border);
     position: sticky;
@@ -38,270 +37,221 @@ body {
     z-index: 50;
 }
 .header-left { display: flex; align-items: center; gap: 10px; }
-.avatar-circle {
-    width: 40px; height: 40px;
-    border-radius: 50%;
-    object-fit: cover;
-    background: var(--blue);
-}
-.logo { font-weight: bold; font-size: 20px; }
+.avatar-circle { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--blue); }
+.logo { font-weight: bold; font-size: 18px; color: var(--white); }
 
 .balance-wrap {
     display: flex; align-items: center; gap: 6px;
-    background: var(--border); padding: 10px 16px;
-    border-radius: 22px; cursor: pointer; font-weight: bold; font-size: 16px;
+    background: var(--border); padding: 8px 14px;
+    border-radius: 20px; cursor: pointer;
+    font-weight: bold; font-size: 15px; color: var(--blue-light);
 }
-.plus-btn { color: var(--blue); font-size: 22px; margin-left: 4px; }
+.plus-btn { color: var(--blue); font-size: 18px; margin-left: 4px; }
 
-.page { display: none; padding: 16px; animation: fade 0.3s ease; }
+.page { display: none; padding: 14px; animation: fade 0.25s ease; }
 .page.active { display: block; }
 .page.fullscreen {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: var(--bg); z-index: 100; display: none;
-    flex-direction: column; padding: 60px 16px 16px; overflow-y: auto;
+    flex-direction: column; padding: 50px 14px 14px; overflow-y: auto;
 }
 .page.fullscreen.active { display: flex; }
 
-@keyframes fade {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-}
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 .close-btn {
-    position: absolute; top: 16px; left: 16px;
-    font-size: 26px; color: var(--gray); cursor: pointer; z-index: 10;
-    padding: 8px;
+    position: absolute; top: 14px; left: 14px;
+    font-size: 22px; color: var(--gray); cursor: pointer; z-index: 10; padding: 6px;
 }
 
-.section-title { font-size: 22px; font-weight: bold; margin: 16px 0 12px; }
+.section-title { font-size: 18px; font-weight: bold; margin: 14px 0 10px; color: var(--white); }
+.sub-text { font-size: 13px; color: var(--gray); margin-bottom: 10px; }
 
 .btn-blue {
-    width: 100%; padding: 16px;
-    background: var(--blue); color: #fff;
-    border: none; border-radius: var(--radius);
-    font-size: 16px; font-weight: bold; cursor: pointer;
+    width: 100%; padding: 14px; background: var(--blue); color: #fff;
+    border: none; border-radius: var(--radius); font-size: 15px; font-weight: bold; cursor: pointer;
 }
-.btn-blue:active { background: var(--blue2); }
-.btn-blue.big { padding: 18px; font-size: 18px; }
+.btn-blue:active { background: var(--blue-dark); }
+.btn-blue.big { padding: 16px; font-size: 16px; }
 
 .btn-gold {
-    width: 100%; padding: 16px;
-    background: linear-gradient(135deg, var(--gold), #b8861e);
-    color: #000; border: none; border-radius: var(--radius);
-    font-size: 16px; font-weight: bold; cursor: pointer;
+    width: 100%; padding: 14px;
+    background: linear-gradient(135deg, var(--blue-light), var(--blue));
+    color: #fff; border: none; border-radius: var(--radius);
+    font-size: 15px; font-weight: bold; cursor: pointer;
 }
-.btn-gold:active { transform: scale(0.97); }
-.btn-gold.big { padding: 18px; font-size: 18px; }
+.btn-gold:active { opacity: 0.8; }
+.btn-gold.big { padding: 16px; font-size: 16px; }
 
 input {
-    width: 100%; padding: 16px;
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: var(--radius); color: var(--white);
-    font-size: 16px; margin-bottom: 14px; outline: none;
+    width: 100%; padding: 14px; background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--white); font-size: 15px; margin-bottom: 12px; outline: none;
 }
 input:focus { border-color: var(--blue); }
 
-.game-grid { display: flex; gap: 12px; margin-bottom: 14px; }
+.game-grid { display: flex; gap: 10px; margin-bottom: 12px; }
 .game-card {
-    flex: 1; padding: 28px 14px;
-    background: var(--card); border: 1px solid var(--border);
+    flex: 1; padding: 22px 12px; background: var(--card); border: 1px solid var(--border);
     border-radius: var(--radius); cursor: pointer;
-    display: flex; flex-direction: column; align-items: center; gap: 8px;
-    font-size: 15px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    transition: all 0.2s;
 }
-.game-card.blue { border-left: 3px solid var(--blue); }
-.game-card:active { border-color: var(--blue); transform: scale(0.97); }
-.game-card span:first-child { font-size: 36px; }
+.game-card:active { border-color: var(--blue); }
+.game-card span:first-child { font-size: 30px; }
+.game-card span:last-child { font-size: 13px; color: var(--gray); }
 
 .free-case {
-    display: flex; align-items: center; gap: 12px;
-    background: var(--card); border: 1px solid var(--gold);
-    border-radius: var(--radius); padding: 16px; cursor: pointer; margin-bottom: 14px;
-    font-size: 16px;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card); border: 1px solid var(--blue);
+    border-radius: var(--radius); padding: 14px; cursor: pointer; margin-bottom: 12px;
 }
-.free-case span:first-child { font-size: 32px; }
+.free-case span:first-child { font-size: 28px; }
 
-.case-category { margin-bottom: 16px; }
-.cat-name { font-size: 16px; color: var(--gold); margin-bottom: 10px; font-weight: bold; }
-.cases-row { display: flex; gap: 10px; }
-.case-mini {
-    flex: 1; padding: 16px 12px;
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: var(--radius); text-align: center; cursor: pointer;
-    font-size: 14px;
-}
-.case-mini span:last-child { color: var(--gold); font-weight: bold; margin-top: 6px; display: block; }
+.case-category { margin-bottom: 14px; }
+.cat-name { font-size: 14px; color: var(--blue-light); margin-bottom: 8px; font-weight: bold; }
 
 .case-card {
-    display: flex; align-items: center; gap: 12px;
+    display: flex; align-items: center; gap: 10px;
     background: var(--card); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 16px; margin-bottom: 10px; cursor: pointer;
-    font-size: 16px;
+    border-radius: var(--radius); padding: 14px; margin-bottom: 8px; cursor: pointer;
 }
-.case-card span:last-child { margin-left: auto; color: var(--gold); font-weight: bold; }
+.case-card span:last-child { margin-left: auto; color: var(--blue-light); font-weight: bold; }
 
 .crash-game { display: flex; flex-direction: column; height: 100%; }
-.crash-multiplier { font-size: 36px; font-weight: bold; color: var(--gold); text-align: center; margin-bottom: 12px; }
-.crash-graph {
-    flex: 1; background: var(--card); border-radius: var(--radius);
-    margin-bottom: 14px; position: relative; overflow: hidden;
-}
-.crash-bet-area { display: flex; gap: 10px; }
+.crash-multiplier { font-size: 32px; font-weight: bold; color: var(--blue-light); text-align: center; margin-bottom: 10px; }
+.crash-graph { flex: 1; background: var(--card); border-radius: var(--radius); margin-bottom: 12px; display: flex; align-items: flex-end; overflow: hidden; }
+.crash-bet-area { display: flex; gap: 8px; }
 .crash-bet-area input { flex: 2; margin-bottom: 0; }
 .crash-bet-area button { flex: 1; }
 
 .slots-game { display: flex; flex-direction: column; height: 100%; }
-.slot-tabs { display: flex; gap: 4px; background: var(--card); border-radius: 12px; padding: 4px; margin-bottom: 16px; }
+.slot-tabs { display: flex; gap: 4px; background: var(--card); border-radius: 10px; padding: 4px; margin-bottom: 8px; }
 .slot-tab {
-    flex: 1; padding: 14px; border: none; background: none;
-    color: var(--gray); font-size: 15px; border-radius: 10px; cursor: pointer;
+    flex: 1; padding: 12px; border: none; background: none;
+    color: var(--gray); font-size: 13px; border-radius: 8px; cursor: pointer;
 }
-.slot-tab.active { color: #fff; font-weight: bold; }
-.slot-tab:nth-child(1).active { background: var(--blue); }
-.slot-tab:nth-child(2).active { background: var(--red); }
-.slot-tab:nth-child(3).active { background: var(--gold); }
+.slot-tab.active { color: #fff; font-weight: bold; background: var(--blue); }
+
+.slot-info { text-align: center; color: var(--gray); font-size: 12px; margin-bottom: 6px; }
 
 .slot-reels {
-    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
-    margin-bottom: 14px; padding: 12px;
+    display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
+    margin-bottom: 12px; padding: 10px;
     background: var(--card); border-radius: var(--radius);
-    border: 2px solid var(--blue); min-height: 120px;
+    border: 2px solid var(--blue); min-height: 110px;
 }
 .slot-reel {
-    width: 80px; height: 100px;
-    background: var(--border); border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 36px;
+    width: 70px; height: 90px; background: var(--border); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 30px;
 }
 
-.slot-multipliers { display: flex; gap: 8px; margin-bottom: 14px; }
+.slot-multipliers { display: flex; gap: 6px; margin-bottom: 12px; }
 .mult-btn {
-    flex: 1; padding: 12px; background: var(--card);
-    border: 1px solid var(--border); border-radius: 10px;
-    color: var(--gray); font-size: 16px; cursor: pointer;
+    flex: 1; padding: 10px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 8px;
+    color: var(--gray); font-size: 14px; cursor: pointer;
 }
-.mult-btn.active { border-color: var(--blue); color: var(--blue); }
+.mult-btn.active { border-color: var(--blue); color: var(--blue-light); }
 
 .case-open-container { text-align: center; }
-.case-reels { display: flex; gap: 8px; justify-content: center; margin: 20px 0; }
+.case-reels { display: flex; gap: 6px; justify-content: center; margin: 20px 0; }
 .case-reel-item {
-    width: 70px; height: 90px;
-    background: var(--border); border-radius: 10px;
+    width: 60px; height: 80px; background: var(--border); border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 32px; animation: reelSpin 0.1s linear infinite;
+    font-size: 28px; animation: reelSpin 0.3s ease-in-out infinite;
 }
-@keyframes reelSpin {
-    0% { transform: translateY(-10px); }
-    100% { transform: translateY(10px); }
-}
+@keyframes reelSpin { 0% { transform: translateY(-4px); } 50% { transform: translateY(4px); } 100% { transform: translateY(-4px); } }
 
-.ref-card { background: var(--card); border-radius: var(--radius); padding: 24px; text-align: center; }
+.ref-card { background: var(--card); border-radius: var(--radius); padding: 20px; text-align: center; }
 .copy-btn {
-    width: 100%; padding: 18px; background: #fff; color: #000;
-    border: none; border-radius: var(--radius); font-size: 17px; font-weight: bold; cursor: pointer;
+    width: 100%; padding: 16px; background: var(--blue); color: #fff;
+    border: none; border-radius: var(--radius); font-size: 15px; font-weight: bold; cursor: pointer;
 }
 
-#leaderboard-list { display: flex; flex-direction: column; gap: 8px; }
+#leaderboard-list { display: flex; flex-direction: column; gap: 6px; }
 .lb-row {
-    display: flex; align-items: center; gap: 12px;
-    background: var(--card); padding: 14px; border-radius: var(--radius); font-size: 15px;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card); padding: 12px; border-radius: var(--radius);
 }
-.lb-place { font-weight: bold; color: var(--gold); width: 30px; }
-.lb-avatar {
-    width: 36px; height: 36px; background: var(--blue); border-radius: 50%;
-    display: flex; align-items: center; justify-content: center; font-size: 15px;
-}
-.lb-name { flex: 1; }
-.lb-amount { color: var(--gold); font-weight: bold; }
+.lb-place { font-weight: bold; color: var(--blue-light); width: 28px; }
+.lb-avatar { width: 32px; height: 32px; background: var(--blue); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff; }
+.lb-name { flex: 1; font-size: 14px; }
+.lb-amount { color: var(--blue-light); font-weight: bold; font-size: 14px; }
 
-.empty { text-align: center; color: var(--gray); padding: 40px; font-size: 16px; }
+.empty { text-align: center; color: var(--gray); padding: 40px; }
+
 .inv-item {
-    display: flex; align-items: center; gap: 12px;
-    background: var(--card); padding: 14px; border-radius: var(--radius); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card); padding: 12px; border-radius: var(--radius); margin-bottom: 6px;
 }
 .inv-name { flex: 1; }
-.inv-value { color: var(--gold); font-weight: bold; }
-.inv-sell {
-    background: var(--red); color: #fff; border: none;
-    padding: 10px 14px; border-radius: 10px; cursor: pointer; font-size: 14px;
-}
+.inv-value { color: var(--blue-light); font-weight: bold; }
+.inv-sell { background: var(--red); color: #fff; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
 
-#shop-list { display: flex; flex-direction: column; gap: 8px; }
+#shop-list { display: flex; flex-direction: column; gap: 6px; }
 .shop-item {
-    display: flex; align-items: center; gap: 12px;
-    background: var(--card); padding: 14px; border-radius: var(--radius);
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card); padding: 12px; border-radius: var(--radius);
 }
 .shop-name { flex: 1; }
-.shop-price { color: var(--gold); font-weight: bold; }
-.shop-buy {
-    background: var(--green); color: #fff; border: none;
-    padding: 10px 14px; border-radius: 10px; cursor: pointer; font-size: 14px;
-}
+.shop-price { color: var(--blue-light); font-weight: bold; }
+.shop-buy { background: var(--green); color: #fff; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
 
-.nft-icon {
-    width: 50px; height: 50px;
-    border-radius: 12px;
-    background-size: cover;
-    background-color: var(--border);
-    flex-shrink: 0;
-}
-.nft-scared_cat { background: linear-gradient(135deg, #2a1a3a, #4a2a5a); }
-.nft-mightly_arms { background: linear-gradient(135deg, #3a1a1a, #5a2a2a); }
-.nft-loot_bag { background: linear-gradient(135deg, #1a3a1a, #2a5a2a); }
-.nft-bricks { background: linear-gradient(135deg, #3a2a1a, #5a4a2a); }
-.nft-diamond { background: linear-gradient(135deg, #1a2a3a, #2a4a5a); }
-.nft-punk { background: linear-gradient(135deg, #3a1a3a, #5a2a5a); }
-.nft-ape { background: linear-gradient(135deg, #2a3a1a, #4a5a2a); }
-.nft-rocket { background: linear-gradient(135deg, #1a1a3a, #2a2a5a); }
-.nft-bitcoin { background: linear-gradient(135deg, #3a3a1a, #5a5a2a); }
-.nft-snoop { background: linear-gradient(135deg, #1a3a2a, #2a5a4a); }
-.nft-torch { background: linear-gradient(135deg, #3a1a0a, #5a2a0a); }
-.nft-icecream { background: linear-gradient(135deg, #3a2a3a, #5a4a5a); }
-.nft-ghost { background: linear-gradient(135deg, #1a1a2a, #2a2a4a); }
-.nft-phoenix { background: linear-gradient(135deg, #3a0a0a, #5a1a1a); }
-.nft-dragon { background: linear-gradient(135deg, #0a3a0a, #1a5a1a); }
-.nft-lamp { background: linear-gradient(135deg, #3a3a0a, #5a5a1a); }
-.nft-ship { background: linear-gradient(135deg, #0a2a3a, #1a4a5a); }
-.nft-ring { background: linear-gradient(135deg, #3a0a3a, #5a1a5a); }
-.nft-cake { background: linear-gradient(135deg, #3a1a2a, #5a2a4a); }
-.nft-rose { background: linear-gradient(135deg, #3a0a1a, #5a1a2a); }
-.nft-bear { background: linear-gradient(135deg, #2a1a0a, #4a2a1a); }
-.nft-wand { background: linear-gradient(135deg, #1a0a3a, #2a1a5a); }
-.nft-crystal { background: linear-gradient(135deg, #1a3a3a, #2a5a5a); }
-.nft-key { background: linear-gradient(135deg, #3a3a0a, #5a5a1a); }
-.nft-crown { background: linear-gradient(135deg, #3a2a0a, #5a4a1a); }
-.nft-ruby { background: linear-gradient(135deg, #3a0a0a, #5a1a1a); }
-.nft-amulet { background: linear-gradient(135deg, #0a3a2a, #1a5a4a); }
-.nft-sword { background: linear-gradient(135deg, #1a1a1a, #3a3a3a); }
-.nft-shield { background: linear-gradient(135deg, #2a2a3a, #4a4a5a); }
-.nft-potion { background: linear-gradient(135deg, #0a3a0a, #1a5a1a); }
-.nft-default { background: linear-gradient(135deg, #2a2a2a, #4a4a4a); }
+.nft-icon { width: 44px; height: 44px; border-radius: 10px; background-color: var(--border); flex-shrink: 0; }
+.nft-scared_cat { background: linear-gradient(135deg, #1e3a5f, #2563eb); }
+.nft-mightly_arms { background: linear-gradient(135deg, #3b1f1f, #dc2626); }
+.nft-loot_bag { background: linear-gradient(135deg, #1f3b1f, #16a34a); }
+.nft-bricks { background: linear-gradient(135deg, #3b2f1f, #ca8a04); }
+.nft-diamond { background: linear-gradient(135deg, #1f2f3b, #0284c7); }
+.nft-punk { background: linear-gradient(135deg, #2f1f3b, #7c3aed); }
+.nft-ape { background: linear-gradient(135deg, #3b1f2f, #db2777); }
+.nft-rocket { background: linear-gradient(135deg, #1f1f3b, #4f46e5); }
+.nft-bitcoin { background: linear-gradient(135deg, #3b2f1f, #f59e0b); }
+.nft-snoop { background: linear-gradient(135deg, #1f3b2f, #10b981); }
+.nft-torch { background: linear-gradient(135deg, #3b1f0f, #f97316); }
+.nft-icecream { background: linear-gradient(135deg, #2f1f3b, #a855f7); }
+.nft-ghost { background: linear-gradient(135deg, #1f2f3b, #6366f1); }
+.nft-phoenix { background: linear-gradient(135deg, #3b0f0f, #ef4444); }
+.nft-dragon { background: linear-gradient(135deg, #0f3b0f, #22c55e); }
+.nft-lamp { background: linear-gradient(135deg, #3b3b0f, #eab308); }
+.nft-ship { background: linear-gradient(135deg, #0f2f3b, #06b6d4); }
+.nft-ring { background: linear-gradient(135deg, #3b0f3b, #d946ef); }
+.nft-cake { background: linear-gradient(135deg, #3b1f2f, #f43f5e); }
+.nft-rose { background: linear-gradient(135deg, #3b0f1f, #e11d48); }
+.nft-bear { background: linear-gradient(135deg, #2f1f0f, #b45309); }
+.nft-wand { background: linear-gradient(135deg, #1f0f3b, #8b5cf6); }
+.nft-crystal { background: linear-gradient(135deg, #1f3b3b, #14b8a6); }
+.nft-key { background: linear-gradient(135deg, #3b3b0f, #eab308); }
+.nft-crown { background: linear-gradient(135deg, #3b2f0f, #f59e0b); }
+.nft-ruby { background: linear-gradient(135deg, #3b0f0f, #ef4444); }
+.nft-amulet { background: linear-gradient(135deg, #0f3b2f, #10b981); }
+.nft-sword { background: linear-gradient(135deg, #1f1f1f, #6b7280); }
+.nft-shield { background: linear-gradient(135deg, #2f2f3b, #4b5563); }
+.nft-potion { background: linear-gradient(135deg, #0f3b0f, #22c55e); }
+.nft-default { background: linear-gradient(135deg, #1f2937, #374151); }
 
 .upgrade-container { text-align: center; }
 .wheel {
-    width: 180px; height: 180px; border-radius: 50%;
-    border: 4px solid var(--blue); margin: 0 auto 20px;
+    width: 160px; height: 160px; border-radius: 50%;
+    border: 4px solid var(--blue); margin: 0 auto 16px;
     position: relative; display: flex; align-items: center; justify-content: center;
     background: conic-gradient(var(--green) 0% var(--p), var(--red) var(--p) 100%);
 }
-.wheel-pointer {
-    position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
-    font-size: 24px; color: var(--gold);
-}
-.wheel-chance { font-size: 32px; font-weight: bold; color: #fff; z-index: 2; }
-.upgrade-buttons { display: flex; gap: 10px; margin-bottom: 12px; }
+.wheel-pointer { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 20px; color: var(--blue-light); }
+.wheel-chance { font-size: 28px; font-weight: bold; color: #fff; z-index: 2; }
+.upgrade-buttons { display: flex; gap: 8px; margin-bottom: 10px; }
 .upgrade-buttons button { flex: 1; }
-.upgrade-info { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px; font-size: 16px; }
+.upgrade-info { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 14px; font-size: 14px; color: var(--gray); }
 
-#page-deposit { padding: 60px 16px 16px; }
+#page-deposit { padding: 50px 14px 14px; }
 
 .bottom-nav {
     position: fixed; bottom: 0; left: 0; width: 100%;
     display: flex; background: var(--card); border-top: 1px solid var(--border);
-    padding: 8px 12px 12px; z-index: 50;
+    padding: 6px 10px 10px; z-index: 50;
 }
 .nav-btn {
-    flex: 1; font-size: 26px; background: none; border: none;
-    cursor: pointer; padding: 6px; opacity: 0.4; transition: all 0.3s;
+    flex: 1; font-size: 24px; background: none; border: none;
+    cursor: pointer; padding: 4px; opacity: 0.4; transition: all 0.2s;
 }
-.nav-btn.active { opacity: 1; transform: scale(1.1); }
+.nav-btn.active { opacity: 1; }
