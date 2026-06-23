@@ -341,7 +341,7 @@ async def process_update(data):
                             ("350 ⭐", 350, 50), ("400 ⭐", 400, 20), ("500 ⭐", 500, 15), ("1000 ⭐", 1000, 5)
                         ]},
                         "allornothing": {"price": 2000, "items": [("1000 ⭐", 1000, 50), ("5000 ⭐", 5000, 50)]}
-                    }
+                    await db.execute("CREATE TABLE IF NOT EXISTS inventory (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, item_name TEXT, item_value INTEGER, item_icon TEXT, obtained_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
                     
                     c = cases.get(case)
                     if not c:
