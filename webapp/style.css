@@ -9,7 +9,7 @@
     --gray: #6b7280;
     --red: #c0392b;
     --green: #27ae60;
-    --radius: 12px;
+    --radius: 14px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -19,17 +19,18 @@ body {
     color: var(--white);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     min-height: 100vh;
-    padding-bottom: 80px;
+    padding-bottom: 90px;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
     overflow-x: hidden;
+    font-size: 16px;
 }
 
 .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
+    padding: 14px 16px;
     background: var(--card);
     border-bottom: 1px solid var(--border);
     position: sticky;
@@ -38,27 +39,26 @@ body {
 }
 .header-left { display: flex; align-items: center; gap: 10px; }
 .avatar-circle {
-    width: 36px; height: 36px;
+    width: 40px; height: 40px;
     border-radius: 50%;
     object-fit: cover;
     background: var(--blue);
 }
-.logo { font-weight: bold; font-size: 18px; }
+.logo { font-weight: bold; font-size: 20px; }
 
 .balance-wrap {
     display: flex; align-items: center; gap: 6px;
-    background: var(--border); padding: 8px 14px;
-    border-radius: 20px; cursor: pointer; font-weight: bold;
+    background: var(--border); padding: 10px 16px;
+    border-radius: 22px; cursor: pointer; font-weight: bold; font-size: 16px;
 }
-.star-icon { color: var(--gold); font-size: 18px; }
-.plus-btn { color: var(--blue); font-size: 20px; margin-left: 4px; }
+.plus-btn { color: var(--blue); font-size: 22px; margin-left: 4px; }
 
 .page { display: none; padding: 16px; animation: fade 0.3s ease; }
 .page.active { display: block; }
 .page.fullscreen {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: var(--bg); z-index: 100; display: none;
-    flex-direction: column; padding: 0;
+    flex-direction: column; padding: 60px 16px 16px; overflow-y: auto;
 }
 .page.fullscreen.active { display: flex; }
 
@@ -69,84 +69,92 @@ body {
 
 .close-btn {
     position: absolute; top: 16px; left: 16px;
-    font-size: 24px; color: var(--gray); cursor: pointer; z-index: 10;
+    font-size: 26px; color: var(--gray); cursor: pointer; z-index: 10;
+    padding: 8px;
 }
 
-.section-title { font-size: 20px; font-weight: bold; margin: 16px 0 10px; }
-.sub-text { font-size: 14px; color: var(--gray); margin-bottom: 12px; }
+.section-title { font-size: 22px; font-weight: bold; margin: 16px 0 12px; }
 
 .btn-blue {
-    width: 100%; padding: 14px;
+    width: 100%; padding: 16px;
     background: var(--blue); color: #fff;
     border: none; border-radius: var(--radius);
-    font-size: 15px; font-weight: bold; cursor: pointer;
+    font-size: 16px; font-weight: bold; cursor: pointer;
 }
 .btn-blue:active { background: var(--blue2); }
+.btn-blue.big { padding: 18px; font-size: 18px; }
 
 .btn-gold {
-    width: 100%; padding: 14px;
+    width: 100%; padding: 16px;
     background: linear-gradient(135deg, var(--gold), #b8861e);
     color: #000; border: none; border-radius: var(--radius);
-    font-size: 15px; font-weight: bold; cursor: pointer;
+    font-size: 16px; font-weight: bold; cursor: pointer;
 }
 .btn-gold:active { transform: scale(0.97); }
+.btn-gold.big { padding: 18px; font-size: 18px; }
 
 input {
-    width: 100%; padding: 14px;
+    width: 100%; padding: 16px;
     background: var(--card); border: 1px solid var(--border);
     border-radius: var(--radius); color: var(--white);
-    font-size: 16px; margin-bottom: 12px; outline: none;
+    font-size: 16px; margin-bottom: 14px; outline: none;
 }
 input:focus { border-color: var(--blue); }
 
-.game-grid { display: flex; gap: 10px; margin-bottom: 12px; }
+.game-grid { display: flex; gap: 12px; margin-bottom: 14px; }
 .game-card {
-    flex: 1; padding: 24px 12px;
+    flex: 1; padding: 28px 14px;
     background: var(--card); border: 1px solid var(--border);
     border-radius: var(--radius); cursor: pointer;
     display: flex; flex-direction: column; align-items: center; gap: 8px;
-    transition: all 0.2s;
+    font-size: 15px;
 }
 .game-card.blue { border-left: 3px solid var(--blue); }
 .game-card:active { border-color: var(--blue); transform: scale(0.97); }
-.game-icon { font-size: 32px; }
-.game-label { font-size: 13px; color: var(--gray); }
+.game-card span:first-child { font-size: 36px; }
 
 .free-case {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 12px;
     background: var(--card); border: 1px solid var(--gold);
-    border-radius: var(--radius); padding: 14px; cursor: pointer; margin-bottom: 12px;
+    border-radius: var(--radius); padding: 16px; cursor: pointer; margin-bottom: 14px;
+    font-size: 16px;
 }
-.free-icon { font-size: 28px; }
+.free-case span:first-child { font-size: 32px; }
 
-.case-category { margin-bottom: 14px; }
-.cat-name { font-size: 14px; color: var(--gold); margin-bottom: 8px; font-weight: bold; }
-.cases-row { display: flex; gap: 8px; }
+.case-category { margin-bottom: 16px; }
+.cat-name { font-size: 16px; color: var(--gold); margin-bottom: 10px; font-weight: bold; }
+.cases-row { display: flex; gap: 10px; }
 .case-mini {
-    flex: 1; padding: 14px 10px;
+    flex: 1; padding: 16px 12px;
     background: var(--card); border: 1px solid var(--border);
     border-radius: var(--radius); text-align: center; cursor: pointer;
-    font-size: 13px; transition: all 0.2s;
+    font-size: 14px;
 }
-.case-mini:active { border-color: var(--blue); transform: scale(0.97); }
-.case-mini span { display: block; }
-.case-mini span:last-child { color: var(--gold); font-weight: bold; margin-top: 4px; }
+.case-mini span:last-child { color: var(--gold); font-weight: bold; margin-top: 6px; display: block; }
 
-.crash-game { width: 100%; height: 100%; display: flex; flex-direction: column; padding: 50px 16px 16px; }
+.case-card {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 10px; cursor: pointer;
+    font-size: 16px;
+}
+.case-card span:last-child { margin-left: auto; color: var(--gold); font-weight: bold; }
+
+.crash-game { display: flex; flex-direction: column; height: 100%; }
+.crash-multiplier { font-size: 36px; font-weight: bold; color: var(--gold); text-align: center; margin-bottom: 12px; }
 .crash-graph {
     flex: 1; background: var(--card); border-radius: var(--radius);
-    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 14px; position: relative; overflow: hidden;
 }
-.crash-multiplier { font-size: 48px; font-weight: bold; color: var(--gold); }
-.crash-bet-area { display: flex; gap: 8px; margin-top: 12px; }
-.crash-bet-area input { flex: 2; }
-.crash-bet-area .btn-blue, .crash-bet-area .btn-gold { flex: 1; }
+.crash-bet-area { display: flex; gap: 10px; }
+.crash-bet-area input { flex: 2; margin-bottom: 0; }
+.crash-bet-area button { flex: 1; }
 
-.slots-game { width: 100%; height: 100%; padding: 50px 16px 16px; overflow-y: auto; }
-.slot-tabs { display: flex; gap: 4px; background: var(--card); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+.slots-game { display: flex; flex-direction: column; height: 100%; }
+.slot-tabs { display: flex; gap: 4px; background: var(--card); border-radius: 12px; padding: 4px; margin-bottom: 16px; }
 .slot-tab {
-    flex: 1; padding: 10px; border: none; background: none;
-    color: var(--gray); font-size: 13px; border-radius: 8px; cursor: pointer;
+    flex: 1; padding: 14px; border: none; background: none;
+    color: var(--gray); font-size: 15px; border-radius: 10px; cursor: pointer;
 }
 .slot-tab.active { color: #fff; font-weight: bold; }
 .slot-tab:nth-child(1).active { background: var(--blue); }
@@ -154,86 +162,86 @@ input:focus { border-color: var(--blue); }
 .slot-tab:nth-child(3).active { background: var(--gold); }
 
 .slot-reels {
-    display: flex; gap: 6px; justify-content: center;
-    margin-bottom: 12px; height: 140px;
-    background: var(--card); border-radius: var(--radius); padding: 10px;
-    border: 2px solid var(--blue);
+    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+    margin-bottom: 14px; padding: 12px;
+    background: var(--card); border-radius: var(--radius);
+    border: 2px solid var(--blue); min-height: 120px;
 }
 .slot-reel {
-    width: 90px; height: 120px;
-    background: var(--border); border-radius: 8px;
+    width: 80px; height: 100px;
+    background: var(--border); border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 40px; transition: all 0.1s;
+    font-size: 36px;
 }
 
-.slot-loot { margin-bottom: 12px; }
-.loot-row {
-    display: flex; justify-content: space-between;
-    padding: 8px 12px; background: var(--card); border-radius: 8px;
-    margin-bottom: 4px; font-size: 13px; color: var(--gray);
-}
-
-.slot-multipliers { display: flex; gap: 8px; margin-bottom: 12px; }
+.slot-multipliers { display: flex; gap: 8px; margin-bottom: 14px; }
 .mult-btn {
-    flex: 1; padding: 10px; background: var(--card);
-    border: 1px solid var(--border); border-radius: 8px;
-    color: var(--gray); cursor: pointer;
+    flex: 1; padding: 12px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 10px;
+    color: var(--gray); font-size: 16px; cursor: pointer;
 }
 .mult-btn.active { border-color: var(--blue); color: var(--blue); }
 
-.case-open-container { text-align: center; padding-top: 80px; }
-.case-reel { font-size: 100px; transition: transform 0.1s; }
+.case-open-container { text-align: center; }
+.case-reels { display: flex; gap: 8px; justify-content: center; margin: 20px 0; }
+.case-reel-item {
+    width: 70px; height: 90px;
+    background: var(--border); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; animation: reelSpin 0.1s linear infinite;
+}
+@keyframes reelSpin {
+    0% { transform: translateY(-10px); }
+    100% { transform: translateY(10px); }
+}
 
-.ref-card { background: var(--card); border-radius: var(--radius); padding: 20px; text-align: center; }
+.ref-card { background: var(--card); border-radius: var(--radius); padding: 24px; text-align: center; }
 .copy-btn {
-    width: 100%; padding: 16px; background: #fff; color: #000;
-    border: none; border-radius: var(--radius); font-size: 16px; font-weight: bold; cursor: pointer;
+    width: 100%; padding: 18px; background: #fff; color: #000;
+    border: none; border-radius: var(--radius); font-size: 17px; font-weight: bold; cursor: pointer;
 }
-.ref-hint { font-size: 12px; color: var(--gray); margin: 12px 0; }
-.ref-earned { font-weight: bold; color: var(--gold); font-size: 16px; }
 
-#leaderboard-list { display: flex; flex-direction: column; gap: 6px; }
+#leaderboard-list { display: flex; flex-direction: column; gap: 8px; }
 .lb-row {
-    display: flex; align-items: center; gap: 10px;
-    background: var(--card); padding: 12px; border-radius: var(--radius); font-size: 14px;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); padding: 14px; border-radius: var(--radius); font-size: 15px;
 }
-.lb-place { width: 28px; font-weight: bold; color: var(--gold); }
+.lb-place { font-weight: bold; color: var(--gold); width: 30px; }
 .lb-avatar {
-    width: 32px; height: 32px; background: var(--blue); border-radius: 50%;
-    display: flex; align-items: center; justify-content: center; font-size: 14px;
+    width: 36px; height: 36px; background: var(--blue); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
 }
 .lb-name { flex: 1; }
 .lb-amount { color: var(--gold); font-weight: bold; }
 
-.empty { text-align: center; color: var(--gray); padding: 40px; }
+.empty { text-align: center; color: var(--gray); padding: 40px; font-size: 16px; }
 .inv-item {
-    display: flex; align-items: center; gap: 10px;
-    background: var(--card); padding: 12px; border-radius: var(--radius); margin-bottom: 6px;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); padding: 14px; border-radius: var(--radius); margin-bottom: 8px;
 }
 .inv-name { flex: 1; }
 .inv-value { color: var(--gold); font-weight: bold; }
 .inv-sell {
     background: var(--red); color: #fff; border: none;
-    padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px;
+    padding: 10px 14px; border-radius: 10px; cursor: pointer; font-size: 14px;
 }
 
-#shop-list { display: flex; flex-direction: column; gap: 6px; }
+#shop-list { display: flex; flex-direction: column; gap: 8px; }
 .shop-item {
-    display: flex; align-items: center; gap: 10px;
-    background: var(--card); padding: 12px; border-radius: var(--radius);
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); padding: 14px; border-radius: var(--radius);
 }
 .shop-name { flex: 1; }
 .shop-price { color: var(--gold); font-weight: bold; }
 .shop-buy {
     background: var(--green); color: #fff; border: none;
-    padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px;
+    padding: 10px 14px; border-radius: 10px; cursor: pointer; font-size: 14px;
 }
 
 .nft-icon {
-    width: 48px; height: 48px;
-    border-radius: 10px;
+    width: 50px; height: 50px;
+    border-radius: 12px;
     background-size: cover;
-    background-position: center;
     background-color: var(--border);
     flex-shrink: 0;
 }
@@ -269,26 +277,31 @@ input:focus { border-color: var(--blue); }
 .nft-potion { background: linear-gradient(135deg, #0a3a0a, #1a5a1a); }
 .nft-default { background: linear-gradient(135deg, #2a2a2a, #4a4a4a); }
 
-.upgrade-circle {
-    width: 120px; height: 120px; border-radius: 50%;
-    border: 4px solid var(--blue); margin: 20px auto;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 28px; font-weight: bold; color: var(--blue);
+.upgrade-container { text-align: center; }
+.wheel {
+    width: 180px; height: 180px; border-radius: 50%;
+    border: 4px solid var(--blue); margin: 0 auto 20px;
+    position: relative; display: flex; align-items: center; justify-content: center;
+    background: conic-gradient(var(--green) 0% var(--p), var(--red) var(--p) 100%);
 }
-.upgrade-select { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
-.upgrade-select span { text-align: center; color: var(--gray); padding: 4px; }
+.wheel-pointer {
+    position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+    font-size: 24px; color: var(--gold);
+}
+.wheel-chance { font-size: 32px; font-weight: bold; color: #fff; z-index: 2; }
+.upgrade-buttons { display: flex; gap: 10px; margin-bottom: 12px; }
+.upgrade-buttons button { flex: 1; }
+.upgrade-info { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px; font-size: 16px; }
 
-#page-deposit { padding: 50px 16px 16px; }
-#wallet-status { text-align: center; color: var(--gray); margin: 8px 0; font-size: 13px; }
-#promo-code { margin-bottom: 8px; }
+#page-deposit { padding: 60px 16px 16px; }
 
 .bottom-nav {
     position: fixed; bottom: 0; left: 0; width: 100%;
     display: flex; background: var(--card); border-top: 1px solid var(--border);
-    padding: 6px 8px 10px; z-index: 50;
+    padding: 8px 12px 12px; z-index: 50;
 }
 .nav-btn {
-    flex: 1; font-size: 22px; background: none; border: none;
-    cursor: pointer; padding: 4px; opacity: 0.4; transition: all 0.3s;
+    flex: 1; font-size: 26px; background: none; border: none;
+    cursor: pointer; padding: 6px; opacity: 0.4; transition: all 0.3s;
 }
 .nav-btn.active { opacity: 1; transform: scale(1.1); }
