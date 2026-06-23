@@ -223,7 +223,7 @@ async def webapp_handler(message, bot):
                 await db.commit()
         await message.answer(f"ref:{code}")
     
-    elif act == "promo":
+     act == "promo":
         promo = data.get("code", "").upper()
         async with aiosqlite.connect(DB_NAME) as db:
             cur = await db.execute("SELECT stars, uses_left FROM promos WHERE code=? AND uses_left>0", (promo,))
@@ -232,7 +232,7 @@ async def webapp_handler(message, bot):
                 await db.execute("UPDATE promos SET uses_left=uses_left-1 WHERE code=?", (promo,))
                 await db.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (r[0], uid))
                 await db.commit()
-                await message.answer(f"promo:success,{r[0]}")
+                await message.answer(f"promo:success,{r[0]}", parse_mode=None)
             else:
                 await message.answer("promo:error")
     
