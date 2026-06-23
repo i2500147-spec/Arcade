@@ -348,4 +348,4 @@ async def process_update(data):
                         await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": "case:error,not_found"})
                         return
                     
-                    async with aiosqlite
+                    async with aiosqlite.connect(DB_NAME) as db:
