@@ -24,7 +24,7 @@ WEBAPP_URL = "https://arcade-8ru7.onrender.com"
 DB_NAME = "arcade.db"
 CHANNEL_USERNAME = "@arcade_ludo"
 
-CRYPTOBOT_API_TOKEN = "ТВОЙ_ТОКЕН_CRYPTOBOT"
+CRYPTOBOT_API_TOKEN = "600107:AA2nCW2v5aXOUMSjCNP9SsH0am9817iVvNV"
 CRYPTOBOT_API_URL = "https://pay.crypt.bot/api"
 
 MIN_WITHDRAWAL = 100
