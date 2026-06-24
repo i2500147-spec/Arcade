@@ -169,7 +169,7 @@ async def cmd_stats(message: Message):
         pending = (await (await conn.execute("SELECT COUNT(*), COALESCE(SUM(amount_stars), 0) FROM withdrawals WHERE status = 'pending'")).fetchone())
     await message.answer(f"📊 Статистика\n\n👥 Пользователей: {users_count}\n⭐ Звёзд: {total_balance}\n⏳ Выводов: {pending[0]} ({pending[1]}⭐)")
     @router.message(Command("backup"))
-async def cmd_backup(message: Message):
+ async def cmd_backup(message: Message):
     if not await is_admin(message.from_user.id): return
     try:
         from aiogram.types import FSInputFile
