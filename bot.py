@@ -504,7 +504,11 @@ async def handle_register_photo(update, context):
         )
         await context.bot.send_photo(ADMIN_CHAT_ID, photo_id, caption=caption, reply_markup=admin_approve_kb(user.id))
 
-async def cb_approve_registration(update, context):
+# ============================================================
+# APPROVE / REJECT (С ИСПРАВЛЕНИЯМИ)
+# ============================================================
+
+async def cb_approve_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     if q.from_user.id not in ADMIN_IDS and q.from_user.id != OWNER_ID:
@@ -513,18 +517,22 @@ async def cb_approve_registration(update, context):
 
     tid = int(q.data.split("_")[1])
 
-    # Проверяем, есть ли уже игрок
+    # 1. Проверяем, есть ли уже игрок в players
     existing = await get_player(tid)
     if existing:
         await sb_delete("pending", {"telegram_id": f"eq.{tid}"})
         await q.edit_message_caption(caption=(q.message.caption or "") + "\n\n✅ Уже зарегистрирован")
+        await context.bot.send_message(tid, "✅ Вы уже зарегистрированы! Используйте /start.")
         return
 
+    # 2. Проверяем заявку в pending
     pending = await sb_select("pending", {"telegram_id": f"eq.{tid}", "limit": "1"})
     if not pending:
         await q.edit_message_caption(caption=(q.message.caption or "") + "\n\n⚠️ Заявка не найдена")
+        await sb_delete("pending", {"telegram_id": f"eq.{tid}"})
         return
 
+    # 3. Одобряем
     p = pending[0]
     await sb_insert("players", {
         "telegram_id": tid,
@@ -543,7 +551,7 @@ async def cb_approve_registration(update, context):
     await q.edit_message_caption(caption=(q.message.caption or "") + "\n\n✅ Одобрено")
     await context.bot.send_message(tid, "✅ Заявка одобрена! Используйте /start.")
 
-async def cb_reject_registration(update, context):
+async def cb_reject_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     if q.from_user.id not in ADMIN_IDS and q.from_user.id != OWNER_ID:
@@ -551,18 +559,22 @@ async def cb_reject_registration(update, context):
         return
 
     tid = int(q.data.split("_")[1])
-    
+
+    # 1. Проверяем, есть ли уже игрок в players
     existing = await get_player(tid)
     if existing:
         await sb_delete("pending", {"telegram_id": f"eq.{tid}"})
         await q.edit_message_caption(caption=(q.message.caption or "") + "\n\n✅ Уже зарегистрирован")
         return
 
+    # 2. Проверяем заявку в pending
     pending = await sb_select("pending", {"telegram_id": f"eq.{tid}", "limit": "1"})
     if not pending:
-        await q.edit_message_caption(caption=(q.message.caption or "") + "\n\n⚠️ Заявка не найдена")
+        await q.edit_message_caption(caption=(q.message.caption or "") + "\n\n⚠️ Заявка уже обработана")
+        await sb_delete("pending", {"telegram_id": f"eq.{tid}"})
         return
 
+    # 3. Отклоняем
     await sb_delete("pending", {"telegram_id": f"eq.{tid}"})
     await q.edit_message_caption(caption=(q.message.caption or "") + "\n\n❌ Отказано")
     await context.bot.send_message(tid, "❌ Заявка отклонена.")
