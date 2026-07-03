@@ -2,10 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 Stranger Faceit — Telegram бот для матчмейкинга в Standoff 2.
-Для запуска на Render.com
+Для запуска на Render.com (Background Worker), python-telegram-bot 21.6.
 """
 
-import asyncio
 import json
 import logging
 import os
@@ -13,42 +12,62 @@ import random
 import re
 import string
 import threading
+import time
 from datetime import datetime
 from io import BytesIO
-from typing import Optional
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError, Forbidden, BadRequest
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
+    MessageHandler, ContextTypes, filters, JobQueue,
+)
 from telegram.request import HTTPXRequest
 from PIL import Image, ImageDraw, ImageFont
 
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
 logger = logging.getLogger("stranger_faceit")
 
 # ===== КОНФИГ =====
-BOT_TOKEN = "8280414108:AAGkt0FPZY7PwADKXMhJlLBuZHaJXkNUh6U"
-ADMIN_IDS = [8131755675]
-GENERAL_CHAT_ID = -1004404404847
-ADMIN_CHAT_ID = -1004398372551
-CHAT_LINK = "https://t.me/+Gt7b_p6ywxc3Yjli"
-REQUIRE_SUBSCRIPTION = 1
-SUBSCRIPTION_CHAT_ID = -1004404404847
+# На Render токен и ID лучше хранить в переменных окружения (Settings -> Environment),
+# а не хардкодить — тогда ротация токена не требует передеплоя. Если переменная не
+# задана, используется значение по умолчанию ниже (для локальной разработки).
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8280414108:AAGkt0FPZY7PwADKXMhJlLBuZHaJXkNUh6U")
+ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "8131755675").split(",") if x.strip()]
+GENERAL_CHAT_ID = int(os.environ.get("GENERAL_CHAT_ID", "-1004404404847"))
+ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "-1004398372551"))
+CHAT_LINK = os.environ.get("CHAT_LINK", "https://t.me/+Gt7b_p6ywxc3Yjli")
+REQUIRE_SUBSCRIPTION = int(os.environ.get("REQUIRE_SUBSCRIPTION", "1"))
+SUBSCRIPTION_CHAT_ID = int(os.environ.get("SUBSCRIPTION_CHAT_ID", str(GENERAL_CHAT_ID)))
 
 DATA_FILE = "players.json"
 PENDING_FILE = "pending.json"
 LOBBIES_FILE = "lobbies.json"
+PARTIES_FILE = "parties.json"
 
 MAPS = ["Sandstone", "Rust", "Province", "Breeze", "Dune", "Zone 7", "Hanami"]
-MAP_EMOJI = {"Sandstone": "🏜️", "Rust": "🏭", "Province": "🏘️", "Breeze": "🌬️", "Dune": "🏝️", "Zone 7": "☢️", "Hanami": "🌸"}
+MAP_EMOJI = {
+    "Sandstone": "🏜️", "Rust": "🏭", "Province": "🏘️", "Breeze": "🌬️",
+    "Dune": "🏝️", "Zone 7": "☢️", "Hanami": "🌸",
+}
 PLATFORMS = ["Phone", "PC"]
 LOBBIES_PER_PLATFORM = 6
 LOBBY_SIZE = 10
 TEAM_SIZE = 5
+MAX_PARTY_SIZE = 5
+
 CALIBRATION_GAMES = 10
 CALIBRATION_BASE_ELO = 500
 
-LEVEL_THRESHOLDS = [(1, 0, 500), (2, 501, 750), (3, 751, 900), (4, 901, 1050), (5, 1051, 1200), (6, 1201, 1350), (7, 1351, 1530), (8, 1531, 1750), (9, 1751, 2000), (10, 2001, 10**9)]
+READY_CHECK_TIMEOUT_SECONDS = 60  # время на нажатие "Подтвердить" при 10/10
+
+LEVEL_THRESHOLDS = [
+    (1, 0, 500), (2, 501, 750), (3, 751, 900), (4, 901, 1050), (5, 1051, 1200),
+    (6, 1201, 1350), (7, 1351, 1530), (8, 1531, 1750), (9, 1751, 2000), (10, 2001, 10**9),
+]
 RANK_EMOJI = {1: "🥉", 2: "🥉", 3: "🥉", 4: "🥈", 5: "🥈", 6: "🥈", 7: "🥇", 8: "🥇", 9: "💎", 10: "👑"}
 
 CONNECT_TIMEOUT = 120
@@ -59,22 +78,42 @@ POOL_TIMEOUT = 120
 # ===== ХРАНИЛИЩЕ =====
 _LOCK = threading.Lock()
 
+
 def _load_json(path, default):
-    if not os.path.exists(path): return default
+    if not os.path.exists(path):
+        return default
     try:
-        with open(path, "r", encoding="utf-8") as f: return json.load(f)
-    except: return default
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        logger.exception("Не удалось прочитать %s", path)
+        return default
+
 
 def _save_json(path, data):
     with _LOCK:
         tmp_path = path + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=2)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
         os.replace(tmp_path, path)
 
-def load_players(): return _load_json(DATA_FILE, {})
-def save_players(p): _save_json(DATA_FILE, p)
-def load_pending(): return _load_json(PENDING_FILE, {})
-def save_pending(p): _save_json(PENDING_FILE, p)
+
+def load_players():
+    return _load_json(DATA_FILE, {})
+
+
+def save_players(p):
+    _save_json(DATA_FILE, p)
+
+
+def load_pending():
+    return _load_json(PENDING_FILE, {})
+
+
+def save_pending(p):
+    _save_json(PENDING_FILE, p)
+
+
 def load_lobbies():
     default = {p: [[] for _ in range(LOBBIES_PER_PLATFORM)] for p in PLATFORMS}
     data = _load_json(LOBBIES_FILE, default)
@@ -82,43 +121,105 @@ def load_lobbies():
         if p not in data or not isinstance(data[p], list) or len(data[p]) != LOBBIES_PER_PLATFORM:
             data[p] = [[] for _ in range(LOBBIES_PER_PLATFORM)]
     return data
-def save_lobbies(l): _save_json(LOBBIES_FILE, l)
+
+
+def save_lobbies(l):
+    _save_json(LOBBIES_FILE, l)
+
+
+def load_parties():
+    """
+    {
+      "<leader_id>": {
+          "leader": leader_id,
+          "members": [leader_id, ...],   # включая лидера, макс MAX_PARTY_SIZE
+          "pending_invite": {"target": uid, "invited_at": ts} or None
+      }
+    }
+    Игрок может быть максимум в одной пати одновременно (проверяем при создании).
+    """
+    return _load_json(PARTIES_FILE, {})
+
+
+def save_parties(p):
+    _save_json(PARTIES_FILE, p)
+
+
+def find_party_of(parties, user_id):
+    """Возвращает (leader_id, party_dict) для пати, где состоит user_id, либо (None, None)."""
+    uid = int(user_id)
+    for leader_id, party in parties.items():
+        if uid in party.get("members", []):
+            return leader_id, party
+    return None, None
+
 
 # ===== ИГРОКИ =====
 def new_player(sid):
-    return {"reg": 0, "sid": sid, "name": "", "tag": "", "elo": 0, "level": 0, "wins": 0, "losses": 0, "matches": 0, "mvps": 0, "rank": "🎯", "ban": None, "history": [], "maps": {m: {"wins": 0, "losses": 0} for m in MAPS}, "calib": 0, "calib_elo_buffer": 0, "platform": None}
+    return {
+        "reg": 0, "sid": sid, "name": "", "tag": "", "elo": 0, "level": 0,
+        "wins": 0, "losses": 0, "matches": 0, "mvps": 0, "rank": "🎯", "ban": None,
+        "history": [], "maps": {m: {"wins": 0, "losses": 0} for m in MAPS},
+        "calib": 0, "calib_elo_buffer": 0, "platform": None,
+    }
 
-def get_player(players, user_id): return players.get(str(user_id))
+
+def get_player(players, user_id):
+    return players.get(str(user_id))
+
+
 def find_by_sid(players, sid):
     for uid, p in players.items():
-        if p.get("sid") == sid: return uid
+        if p.get("sid") == sid:
+            return uid
     return None
+
+
 def find_by_tag(players, tag):
     tag_clean = tag.lstrip("@").lower()
     for uid, p in players.items():
-        if p.get("tag", "").lower() == tag_clean: return uid
+        if p.get("tag", "").lower() == tag_clean:
+            return uid
     return None
+
 
 def level_from_elo(elo):
     for lvl, lo, hi in LEVEL_THRESHOLDS:
-        if lo <= elo <= hi: return lvl
+        if lo <= elo <= hi:
+            return lvl
     return 10 if elo > LEVEL_THRESHOLDS[-1][2] else 1
 
-def rank_label(level): return f"{RANK_EMOJI.get(level, '🥉')} {level}"
+
+def rank_label(level):
+    return f"{RANK_EMOJI.get(level, '🥉')} {level}"
+
 
 def compute_match_points(is_winner, kills, deaths, is_mvp):
-    if is_winner: points = 9 + (kills * 0.5) - (deaths * 0.3)
-    else: points = -15 + (kills * 0.5) - (deaths * 0.3)
-    if is_mvp: points += 3
+    if is_winner:
+        points = 9 + (kills * 0.5) - (deaths * 0.3)
+    else:
+        points = -15 + (kills * 0.5) - (deaths * 0.3)
+    if is_mvp:
+        points += 3
     return round(points)
+
 
 def apply_match_result(player, is_winner, kills, deaths, is_mvp):
     points = compute_match_points(is_winner, kills, deaths, is_mvp)
-    snapshot_before = {"matches": player["matches"], "wins": player["wins"], "losses": player["losses"], "mvps": player["mvps"], "calib": player["calib"], "calib_elo_buffer": player["calib_elo_buffer"], "elo": player["elo"], "level": player["level"], "rank": player["rank"]}
+    snapshot_before = {
+        "matches": player["matches"], "wins": player["wins"], "losses": player["losses"],
+        "mvps": player["mvps"], "calib": player["calib"],
+        "calib_elo_buffer": player["calib_elo_buffer"], "elo": player["elo"],
+        "level": player["level"], "rank": player["rank"],
+    }
     player["matches"] += 1
-    if is_winner: player["wins"] += 1
-    else: player["losses"] += 1
-    if is_mvp: player["mvps"] += 1
+    if is_winner:
+        player["wins"] += 1
+    else:
+        player["losses"] += 1
+    if is_mvp:
+        player["mvps"] += 1
+
     if player["calib"] < CALIBRATION_GAMES:
         player["calib"] += 1
         player["calib_elo_buffer"] += points
@@ -127,49 +228,81 @@ def apply_match_result(player, is_winner, kills, deaths, is_mvp):
             player["elo"] = final_elo
             player["level"] = level_from_elo(final_elo)
             player["rank"] = rank_label(player["level"])
-            return {"delta": 0, "old_elo": 0, "new_elo": final_elo, "calibrating": False, "just_finished_calibration": True, "calib_progress": None, "_snapshot_before": snapshot_before}
-        else:
-            return {"delta": 0, "old_elo": 0, "new_elo": 0, "calibrating": True, "just_finished_calibration": False, "calib_progress": f"{player['calib']}/{CALIBRATION_GAMES}", "_snapshot_before": snapshot_before}
-    else:
-        old_elo = player["elo"]
-        new_elo = max(0, old_elo + points)
-        player["elo"] = new_elo
-        player["level"] = level_from_elo(new_elo)
-        player["rank"] = rank_label(player["level"])
-        return {"delta": points, "old_elo": old_elo, "new_elo": new_elo, "calibrating": False, "just_finished_calibration": False, "calib_progress": None, "_snapshot_before": snapshot_before}
+            return {
+                "delta": 0, "old_elo": 0, "new_elo": final_elo, "calibrating": False,
+                "just_finished_calibration": True, "calib_progress": None,
+                "_snapshot_before": snapshot_before,
+            }
+        return {
+            "delta": 0, "old_elo": 0, "new_elo": 0, "calibrating": True,
+            "just_finished_calibration": False,
+            "calib_progress": f"{player['calib']}/{CALIBRATION_GAMES}",
+            "_snapshot_before": snapshot_before,
+        }
+
+    old_elo = player["elo"]
+    new_elo = max(0, old_elo + points)
+    player["elo"] = new_elo
+    player["level"] = level_from_elo(new_elo)
+    player["rank"] = rank_label(player["level"])
+    return {
+        "delta": points, "old_elo": old_elo, "new_elo": new_elo, "calibrating": False,
+        "just_finished_calibration": False, "calib_progress": None,
+        "_snapshot_before": snapshot_before,
+    }
+
 
 def rollback_match_result(player, snapshot_before):
-    for key, value in snapshot_before.items(): player[key] = value
+    for key, value in snapshot_before.items():
+        player[key] = value
+
 
 def apply_map_result(player, map_name, is_winner):
-    if map_name not in player.get("maps", {}): player.setdefault("maps", {})[map_name] = {"wins": 0, "losses": 0}
-    if is_winner: player["maps"][map_name]["wins"] += 1
-    else: player["maps"][map_name]["losses"] += 1
+    if map_name not in player.get("maps", {}):
+        player.setdefault("maps", {})[map_name] = {"wins": 0, "losses": 0}
+    if is_winner:
+        player["maps"][map_name]["wins"] += 1
+    else:
+        player["maps"][map_name]["losses"] += 1
+
 
 def elo_display(player):
-    if player["calib"] < CALIBRATION_GAMES: return f"Калибровка {player['calib']}/{CALIBRATION_GAMES}"
+    if player["calib"] < CALIBRATION_GAMES:
+        return f"Калибровка {player['calib']}/{CALIBRATION_GAMES}"
     return f"{player['rank']} • {player['elo']} ELO"
+
 
 def gen_match_id():
     date_part = datetime.now().strftime("%Y%m%d")
     rand_part = "".join(random.choices(string.digits, k=3))
     return f"M-{date_part}-{rand_part}"
 
+
 # ===== ВЕТО =====
 def start_veto(captain_a_id, captain_b_id):
     pool = MAPS.copy()
     random.shuffle(pool)
-    return {"pool": pool, "banned": [], "turn": captain_a_id, "captain_a": captain_a_id, "captain_b": captain_b_id, "final_map": None}
+    return {
+        "pool": pool, "banned": [], "turn": captain_a_id,
+        "captain_a": captain_a_id, "captain_b": captain_b_id, "final_map": None,
+    }
+
 
 def veto_ban(veto, captain_id, map_name):
-    if veto["final_map"] is not None: return False, "Вето уже завершено."
-    if captain_id != veto["turn"]: return False, "Сейчас не ваша очередь банить."
-    if map_name not in veto["pool"]: return False, "Эта карта уже забанена или не существует."
+    if veto["final_map"] is not None:
+        return False, "Вето уже завершено."
+    if captain_id != veto["turn"]:
+        return False, "Сейчас не ваша очередь банить."
+    if map_name not in veto["pool"]:
+        return False, "Эта карта уже забанена или не существует."
     veto["pool"].remove(map_name)
     veto["banned"].append({"by": captain_id, "map": map_name})
-    if len(veto["pool"]) == 1: veto["final_map"] = veto["pool"][0]
-    else: veto["turn"] = veto["captain_b"] if veto["turn"] == veto["captain_a"] else veto["captain_a"]
+    if len(veto["pool"]) == 1:
+        veto["final_map"] = veto["pool"][0]
+    else:
+        veto["turn"] = veto["captain_b"] if veto["turn"] == veto["captain_a"] else veto["captain_a"]
     return True, None
+
 
 # ===== КАРТОЧКА МАТЧА =====
 CARD_W, CARD_H = 900, 620
@@ -182,20 +315,29 @@ TEXT_DIM = (150, 154, 165)
 GOLD = (240, 190, 80)
 _FONT_CACHE = {}
 
+
 def _font(size, bold=False):
     cache_key = (size, bold)
-    if cache_key in _FONT_CACHE: return _FONT_CACHE[cache_key]
-    candidates = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/system/fonts/Roboto-Bold.ttf" if bold else "/system/fonts/Roboto-Regular.ttf", "/system/fonts/NotoSans-Bold.ttf" if bold else "/system/fonts/NotoSans-Regular.ttf", os.path.expanduser("~/fonts/DejaVuSans-Bold.ttf") if bold else os.path.expanduser("~/fonts/DejaVuSans.ttf")]
+    if cache_key in _FONT_CACHE:
+        return _FONT_CACHE[cache_key]
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/system/fonts/Roboto-Bold.ttf" if bold else "/system/fonts/Roboto-Regular.ttf",
+        "/system/fonts/NotoSans-Bold.ttf" if bold else "/system/fonts/NotoSans-Regular.ttf",
+        os.path.expanduser("~/fonts/DejaVuSans-Bold.ttf") if bold else os.path.expanduser("~/fonts/DejaVuSans.ttf"),
+    ]
     for path in candidates:
         if path and os.path.exists(path):
             try:
                 font = ImageFont.truetype(path, size)
                 _FONT_CACHE[cache_key] = font
                 return font
-            except OSError: continue
+            except OSError:
+                continue
     font = ImageFont.load_default()
     _FONT_CACHE[cache_key] = font
     return font
+
 
 def render_match_card(match_report):
     img = Image.new("RGB", (CARD_W, CARD_H), CARD_BG)
@@ -216,28 +358,25 @@ def render_match_card(match_report):
     for pl in match_report["winners"]:
         mvp_star = " ⭐" if pl.get("mvp") else ""
         name = f"@{pl['tag']}{mvp_star}"
-        if pl.get("calibrating"): sub = f"{pl['kd']} • Калибровка"
-        else: sub = f"{pl['kd']} • {pl['delta']:+d} ELO → {pl['elo']}"
+        sub = f"{pl['kd']} • Калибровка" if pl.get("calibrating") else f"{pl['kd']} • {pl['delta']:+d} ELO → {pl['elo']}"
         row_h = 64
-        draw.rounded_rectangle([left_x, y, left_x+col_w, y+row_h], radius=10, fill=CARD_PANEL)
-        draw.rectangle([left_x, y, left_x+5, y+row_h], fill=WIN_COLOR)
-        draw.text((left_x+20, y+10), name, font=_font(22, bold=True), fill=TEXT_MAIN)
-        draw.text((left_x+20, y+36), sub, font=_font(16), fill=TEXT_DIM)
+        draw.rounded_rectangle([left_x, y, left_x + col_w, y + row_h], radius=10, fill=CARD_PANEL)
+        draw.rectangle([left_x, y, left_x + 5, y + row_h], fill=WIN_COLOR)
+        draw.text((left_x + 20, y + 10), name, font=_font(22, bold=True), fill=TEXT_MAIN)
+        draw.text((left_x + 20, y + 36), sub, font=_font(16), fill=TEXT_DIM)
         y += row_h + 10
     y = top_y
     for pl in match_report["losers"]:
         name = f"@{pl['tag']}"
-        if pl.get("calibrating"): sub = f"{pl['kd']} • Калибровка"
-        else: sub = f"{pl['kd']} • {pl['delta']:+d} ELO → {pl['elo']}"
+        sub = f"{pl['kd']} • Калибровка" if pl.get("calibrating") else f"{pl['kd']} • {pl['delta']:+d} ELO → {pl['elo']}"
         row_h = 64
-        draw.rounded_rectangle([right_x, y, right_x+col_w, y+row_h], radius=10, fill=CARD_PANEL)
-        draw.rectangle([right_x, y, right_x+5, y+row_h], fill=LOSE_COLOR)
-        draw.text((right_x+20, y+10), name, font=_font(22, bold=True), fill=TEXT_MAIN)
-        draw.text((right_x+20, y+36), sub, font=_font(16), fill=TEXT_DIM)
+        draw.rounded_rectangle([right_x, y, right_x + col_w, y + row_h], radius=10, fill=CARD_PANEL)
+        draw.rectangle([right_x, y, right_x + 5, y + row_h], fill=LOSE_COLOR)
+        draw.text((right_x + 20, y + 10), name, font=_font(22, bold=True), fill=TEXT_MAIN)
+        draw.text((right_x + 20, y + 36), sub, font=_font(16), fill=TEXT_DIM)
         y += row_h + 10
     footer_y = CARD_H - 50
-    if match_report.get("confirmed_by"): footer = f"✅ Проверил: @{match_report['confirmed_by']}"
-    else: footer = "Stranger Faceit"
+    footer = f"✅ Проверил: @{match_report['confirmed_by']}" if match_report.get("confirmed_by") else "Stranger Faceit"
     draw.text((CARD_W // 2, footer_y), footer, font=_font(18), fill=TEXT_DIM, anchor="ma")
     buf = BytesIO()
     img.save(buf, format="PNG")
@@ -245,69 +384,167 @@ def render_match_card(match_report):
     buf.name = "match_card.png"
     return buf
 
+
 # ===== КЛАВИАТУРЫ =====
-def kb_register(): return InlineKeyboardMarkup([[InlineKeyboardButton("📝 Регистрация", callback_data="reg:start")]])
+def kb_register():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("📝 Регистрация", callback_data="reg:start")]])
+
+
 def kb_subscribe():
     rows = []
-    if CHAT_LINK: rows.append([InlineKeyboardButton("➡️ Перейти в чат", url=CHAT_LINK)])
+    if CHAT_LINK:
+        rows.append([InlineKeyboardButton("➡️ Перейти в чат", url=CHAT_LINK)])
     rows.append([InlineKeyboardButton("✅ Я подписался", callback_data="sub:check")])
     return InlineKeyboardMarkup(rows)
-def kb_main_menu():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("🔍 Найти матч", callback_data="menu:find")], [InlineKeyboardButton("👤 Профиль", callback_data="menu:profile")], [InlineKeyboardButton("🏆 Топ игроков", callback_data="menu:top")], [InlineKeyboardButton("🆘 Поддержка", callback_data="menu:support")]])
-def kb_back_main(): return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")]])
-def kb_platforms(): return InlineKeyboardMarkup([[InlineKeyboardButton("📱 Phone", callback_data="platform:Phone")], [InlineKeyboardButton("💻 PC", callback_data="platform:PC")], [InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")]])
-def kb_lobbies(platform, lobbies):
+
+
+def kb_main_menu(in_party: bool = False):
+    party_label = "🎉 Пати" if not in_party else "🎉 Пати (моя группа)"
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔍 Найти матч", callback_data="menu:find")],
+        [InlineKeyboardButton(party_label, callback_data="menu:party")],
+        [InlineKeyboardButton("👤 Профиль", callback_data="menu:profile")],
+        [InlineKeyboardButton("🏆 Топ игроков", callback_data="menu:top")],
+        [InlineKeyboardButton("🆘 Поддержка", callback_data="menu:support")],
+    ])
+
+
+def kb_back_main():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")]])
+
+
+def kb_platforms():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📱 Phone", callback_data="platform:Phone")],
+        [InlineKeyboardButton("💻 PC", callback_data="platform:PC")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")],
+    ])
+
+
+def kb_lobbies(platform, lobbies, min_free_slots=1):
     rows = []
     for i in range(LOBBIES_PER_PLATFORM):
         count = len(lobbies[platform][i])
-        rows.append([InlineKeyboardButton(f"Лобби {i + 1} ({count}/{LOBBY_SIZE})", callback_data=f"lobby:{platform}:{i}")])
+        free = LOBBY_SIZE - count
+        label = f"Лобби {i + 1} ({count}/{LOBBY_SIZE})"
+        if free >= min_free_slots:
+            rows.append([InlineKeyboardButton(label, callback_data=f"lobby:{platform}:{i}")])
+        else:
+            rows.append([InlineKeyboardButton(f"🔒 {label}", callback_data="lobby:full")])
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu:find")])
     return InlineKeyboardMarkup(rows)
-def kb_in_lobby(platform, idx): return InlineKeyboardMarkup([[InlineKeyboardButton("🚪 Выйти", callback_data=f"lobby_leave:{platform}:{idx}")]])
+
+
+def kb_in_lobby(platform, idx):
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🚪 Выйти", callback_data=f"lobby_leave:{platform}:{idx}")]])
+
+
 def kb_veto(available_maps):
-    rows = []
-    row = []
+    rows, row = [], []
     for m in available_maps:
         emoji = MAP_EMOJI.get(m, "")
         row.append(InlineKeyboardButton(f"{emoji} {m}", callback_data=f"veto_ban:{m}"))
         if len(row) == 2:
             rows.append(row)
             row = []
-    if row: rows.append(row)
+    if row:
+        rows.append(row)
     return InlineKeyboardMarkup(rows)
-def kb_skip_stats(): return InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить статистику", callback_data="stats:skip")]])
-def kb_admin_review(pending_id): return InlineKeyboardMarkup([[InlineKeyboardButton("✅ ПОДТВЕРДИТЬ", callback_data=f"admin_ok:{pending_id}")], [InlineKeyboardButton("❌ ОТКАЗАТЬ", callback_data=f"admin_no:{pending_id}")]])
+
+
+def kb_skip_stats():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить статистику", callback_data="stats:skip")]])
+
+
+def kb_admin_review(pending_id):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ ПОДТВЕРДИТЬ", callback_data=f"admin_ok:{pending_id}")],
+        [InlineKeyboardButton("❌ ОТКАЗАТЬ", callback_data=f"admin_no:{pending_id}")],
+    ])
+
+
+def kb_party_menu(is_leader: bool, party_size: int):
+    rows = []
+    if is_leader and party_size < MAX_PARTY_SIZE:
+        rows.append([InlineKeyboardButton("➕ Пригласить игрока", callback_data="party:invite")])
+    rows.append([InlineKeyboardButton("🚪 Покинуть пати", callback_data="party:leave")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")])
+    return InlineKeyboardMarkup(rows)
+
+
+def kb_party_invite_response(leader_id):
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Принять", callback_data=f"party_accept:{leader_id}"),
+            InlineKeyboardButton("❌ Отказать", callback_data=f"party_decline:{leader_id}"),
+        ]
+    ])
+
+
+def kb_ready_check():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("✅ Подтвердить", callback_data="ready:confirm")]])
+
 
 # ===== ВСПОМОГАТЕЛЬНОЕ =====
 async def safe_delete(message):
-    if message is None: return
-    try: await message.delete()
-    except BadRequest: pass
-    except TelegramError: pass
+    if message is None:
+        return
+    try:
+        await message.delete()
+    except (BadRequest, TelegramError):
+        pass
+
 
 async def safe_send(bot, chat_id, text=None, photo=None, **kwargs):
     try:
-        if photo is not None: return await bot.send_photo(chat_id=chat_id, photo=photo, caption=text, **kwargs)
+        if photo is not None:
+            return await bot.send_photo(chat_id=chat_id, photo=photo, caption=text, **kwargs)
         return await bot.send_message(chat_id=chat_id, text=text, **kwargs)
-    except Forbidden: logger.warning("Не удалось отправить сообщение %s", chat_id)
-    except TelegramError: logger.exception("Ошибка отправки")
+    except Forbidden:
+        logger.warning("Не удалось отправить сообщение %s: бот заблокирован или ЛС недоступны", chat_id)
+    except TelegramError:
+        logger.exception("Ошибка отправки сообщения в чат %s", chat_id)
     return None
 
+
 async def is_subscribed(bot, user_id):
-    if not REQUIRE_SUBSCRIPTION or not SUBSCRIPTION_CHAT_ID: return True
+    if not REQUIRE_SUBSCRIPTION or not SUBSCRIPTION_CHAT_ID:
+        return True
     try:
         member = await bot.get_chat_member(SUBSCRIPTION_CHAT_ID, user_id)
         return member.status in ("member", "administrator", "creator")
-    except TelegramError: return True
+    except TelegramError:
+        return True
+
 
 def main_menu_text(player):
-    return f"🏠 *ГЛАВНОЕ МЕНЮ*\n\n👤 @{player['tag']}\n📊 {elo_display(player)}\n🏆 Побед: {player['wins']} | ❌ Поражений: {player['losses']}\n🎯 Матчей: {player['matches']}"
+    return (
+        f"🏠 *ГЛАВНОЕ МЕНЮ*\n\n"
+        f"👤 @{player['tag']}\n"
+        f"📊 {elo_display(player)}\n"
+        f"🏆 Побед: {player['wins']} | ❌ Поражений: {player['losses']}\n"
+        f"🎯 Матчей: {player['matches']}"
+    )
+
 
 def profile_text(player):
     winrate = round((player['wins'] / player['matches'] * 100) if player['matches'] > 0 else 0, 1)
-    text = f"📊 *МОЙ ПРОФИЛЬ*\n\n👤 @{player['tag']}\n🆔 {player['sid']}\n🏅 {player['rank']}\n📊 {elo_display(player)}\n\n📈 *СТАТИСТИКА*\n─────────────────\n🎯 Матчей: {player['matches']}\n🏆 Побед: {player['wins']}\n❌ Поражений: {player['losses']}\n📊 Winrate: {winrate}%\n⭐ MVP: {player['mvps']}\n"
-    if player.get('calib', 0) < CALIBRATION_GAMES: text += f"📌 Калибровка: {player['calib']}/{CALIBRATION_GAMES}\n"
-    text += f"\n📊 *ПО КАРТАМ*\n─────────────────\n"
+    text = (
+        f"📊 *МОЙ ПРОФИЛЬ*\n\n"
+        f"👤 @{player['tag']}\n"
+        f"🆔 {player['sid']}\n"
+        f"🏅 {player['rank']}\n"
+        f"📊 {elo_display(player)}\n\n"
+        f"📈 *СТАТИСТИКА*\n─────────────────\n"
+        f"🎯 Матчей: {player['matches']}\n"
+        f"🏆 Побед: {player['wins']}\n"
+        f"❌ Поражений: {player['losses']}\n"
+        f"📊 Winrate: {winrate}%\n"
+        f"⭐ MVP: {player['mvps']}\n"
+    )
+    if player.get('calib', 0) < CALIBRATION_GAMES:
+        text += f"📌 Калибровка: {player['calib']}/{CALIBRATION_GAMES}\n"
+    text += "\n📊 *ПО КАРТАМ*\n─────────────────\n"
     for map_name, stats in player['maps'].items():
         total = stats['wins'] + stats['losses']
         if total > 0:
@@ -315,18 +552,139 @@ def profile_text(player):
             text += f"{MAP_EMOJI.get(map_name, '')} {map_name}: {stats['wins']}-{stats['losses']} ({rate}%)\n"
     return text
 
+
+def party_text(parties, leader_id, players):
+    party = parties.get(str(leader_id)) or parties.get(leader_id)
+    if not party:
+        return None
+    lines = ["🎉 *ПАТИ*\n"]
+    for uid in party["members"]:
+        p = players.get(str(uid), {})
+        tag = p.get("tag", str(uid))
+        crown = "👑 " if uid == party["leader"] else "• "
+        lines.append(f"{crown}@{tag}")
+    lines.append(f"\n👥 Состав: {len(party['members'])}/{MAX_PARTY_SIZE}")
+    return "\n".join(lines)
+
+
+# ===== READY-CHECK (подтверждение готовности перед стартом матча) =====
+# Хранится в памяти процесса (не переживает рестарт), поскольку это короткоживущее
+# состояние на 60 секунд между "лобби набралось" и "стартовало вето".
+READY_CHECKS_BY_ID = {}   # rc_id -> {"players": [...], "confirmed": set(), "platform":.., "lobby_idx":.., "status": "pending"/"done"/"expired"}
+READY_CHECKS = {}         # user_id -> {"id": rc_id}
+_rc_counter = 0
+
+
+def _next_rc_id():
+    global _rc_counter
+    _rc_counter += 1
+    return f"rc{_rc_counter}"
+
+
+async def start_ready_check(platform: str, lobby_idx: int, context: ContextTypes.DEFAULT_TYPE):
+    lobbies = load_lobbies()
+    players_list = lobbies[platform][lobby_idx].copy()
+    # Резервируем лобби на время проверки готовности, чтобы никто новый не зашёл поверх:
+    lobbies[platform][lobby_idx] = []
+    save_lobbies(lobbies)
+
+    rc_id = _next_rc_id()
+    rc = {
+        "players": players_list, "confirmed": set(), "platform": platform,
+        "lobby_idx": lobby_idx, "status": "pending",
+    }
+    READY_CHECKS_BY_ID[rc_id] = rc
+    for uid in players_list:
+        READY_CHECKS[uid] = {"id": rc_id}
+
+    for uid in players_list:
+        await safe_send(
+            context.bot, uid,
+            f"👥 *Лобби набрано!* ({LOBBY_SIZE}/{LOBBY_SIZE})\n\n"
+            f"У тебя есть {READY_CHECK_TIMEOUT_SECONDS} секунд, чтобы подтвердить участие.\n"
+            f"Если не успеешь — будешь удалён(а) из матча.",
+            reply_markup=kb_ready_check(), parse_mode="Markdown",
+        )
+
+    if context.job_queue is not None:
+        context.job_queue.run_once(
+            ready_check_timeout_job, READY_CHECK_TIMEOUT_SECONDS, data={"rc_id": rc_id},
+        )
+    else:
+        logger.warning("JobQueue недоступен — таймаут ready-check не будет автоматически применён.")
+
+
+async def ready_check_timeout_job(context: ContextTypes.DEFAULT_TYPE):
+    rc_id = context.job.data["rc_id"]
+    rc = READY_CHECKS_BY_ID.get(rc_id)
+    if not rc or rc["status"] != "pending":
+        return
+    await finalize_ready_check(rc_id, context, timed_out=True)
+
+
+async def finalize_ready_check(rc_id: str, context: ContextTypes.DEFAULT_TYPE, timed_out: bool = False):
+    rc = READY_CHECKS_BY_ID.get(rc_id)
+    if not rc or rc["status"] != "pending":
+        return
+    rc["status"] = "done"
+
+    confirmed = [uid for uid in rc["players"] if uid in rc["confirmed"]]
+    not_confirmed = [uid for uid in rc["players"] if uid not in rc["confirmed"]]
+
+    for uid in rc["players"]:
+        READY_CHECKS.pop(uid, None)
+
+    if not_confirmed:
+        # Кто-то не подтвердил вовремя — матч не стартует. Подтвердившие возвращаются
+        # в это же лобби (оно было зарезервировано пустым), неподтвердившие — нет.
+        for uid in not_confirmed:
+            await safe_send(
+                context.bot, uid,
+                "❌ Ты не подтвердил(а) готовность вовремя и был(а) удалён(а) из матча.",
+                reply_markup=kb_platforms(),
+            )
+        lobbies = load_lobbies()
+        lobbies[rc["platform"]][rc["lobby_idx"]] = confirmed.copy()
+        save_lobbies(lobbies)
+        for uid in confirmed:
+            count = len(confirmed)
+            await safe_send(
+                context.bot, uid,
+                f"⚠️ Не все игроки подтвердили готовность. Матч отменён.\n"
+                f"Ты остаёшься в лобби {rc['lobby_idx'] + 1} ({count}/{LOBBY_SIZE}).",
+                reply_markup=kb_in_lobby(rc["platform"], rc["lobby_idx"]),
+            )
+        return
+
+    # Все подтвердили — стартуем матч по-настоящему
+    await start_match(rc["platform"], rc["players"], context)
+
+
 # ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     players = load_players()
     player = get_player(players, user.id)
     if REQUIRE_SUBSCRIPTION and not await is_subscribed(context.bot, user.id):
-        await update.message.reply_text("📢 *Для использования бота подпишись на наш чат.*", reply_markup=kb_subscribe(), parse_mode="Markdown")
+        await update.message.reply_text(
+            "📢 *Для использования бота подпишись на наш чат.*",
+            reply_markup=kb_subscribe(), parse_mode="Markdown",
+        )
         return
     if not player or player.get("reg") != 1:
-        await update.message.reply_text("🎮 *STRANGER FACEIT*\n\nДобро пожаловать! Для начала игры необходимо зарегистрироваться.\nНажми на кнопку ниже.", reply_markup=kb_register(), parse_mode="Markdown")
+        await update.message.reply_text(
+            "🎮 *STRANGER FACEIT*\n\nДобро пожаловать! Для начала игры необходимо "
+            "зарегистрироваться.\nНажми на кнопку ниже.",
+            reply_markup=kb_register(), parse_mode="Markdown",
+        )
         return
-    await update.message.reply_text(main_menu_text(player), reply_markup=kb_main_menu(), parse_mode="Markdown")
+    parties = load_parties()
+    leader_id, _ = find_party_of(parties, user.id)
+    await update.message.reply_text(
+        main_menu_text(player), reply_markup=kb_main_menu(in_party=bool(leader_id)),
+        parse_mode="Markdown",
+    )
+
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     match = context.user_data.get('match')
@@ -334,10 +692,16 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Сейчас нет матча, ожидающего скриншот результата.")
         return
     photo_sizes = update.message.photo
-    if not photo_sizes: return
+    if not photo_sizes:
+        return
     file_id = photo_sizes[-1].file_id
     context.user_data['match_photo'] = file_id
-    await update.message.reply_text("✅ Скриншот результата принят!\n\nТеперь объяви победившую сторону:\n`/winner ct` или `/winner t`", parse_mode="Markdown")
+    await update.message.reply_text(
+        "✅ Скриншот результата принят!\n\nТеперь объяви победившую сторону:\n"
+        "`/winner ct` или `/winner t`",
+        parse_mode="Markdown",
+    )
+
 
 async def winner_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     match = context.user_data.get('match')
@@ -355,8 +719,16 @@ async def winner_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     match['winner_side'] = side
     match['status'] = 'awaiting_winning_team'
     context.user_data['match'] = match
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔵 Команда А", callback_data="winteam:a")], [InlineKeyboardButton("🔴 Команда Б", callback_data="winteam:b")]])
-    await update.message.reply_text(f"✅ Победила сторона: *{side.upper()}*\n\nКакая команда играла за {side.upper()} и победила?", reply_markup=kb, parse_mode="Markdown")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔵 Команда А", callback_data="winteam:a")],
+        [InlineKeyboardButton("🔴 Команда Б", callback_data="winteam:b")],
+    ])
+    await update.message.reply_text(
+        f"✅ Победила сторона: *{side.upper()}*\n\nКакая команда играла за {side.upper()} "
+        f"и победила?",
+        reply_markup=kb, parse_mode="Markdown",
+    )
+
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -367,33 +739,229 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     players = load_players()
     player = get_player(players, user.id)
 
+    # ---------- подписка ----------
     if data == "sub:check":
         if await is_subscribed(context.bot, user.id):
             await safe_delete(query.message)
             if not player or player.get("reg") != 1:
-                await query.message.reply_text("✅ Подписка подтверждена!\n\n🎮 *STRANGER FACEIT*\n\nНажми кнопку для регистрации", reply_markup=kb_register(), parse_mode="Markdown")
+                await query.message.reply_text(
+                    "✅ Подписка подтверждена!\n\n🎮 *STRANGER FACEIT*\n\nНажми кнопку для регистрации",
+                    reply_markup=kb_register(), parse_mode="Markdown",
+                )
             else:
-                await query.message.reply_text(main_menu_text(player), reply_markup=kb_main_menu(), parse_mode="Markdown")
+                parties = load_parties()
+                leader_id, _ = find_party_of(parties, user.id)
+                await query.message.reply_text(
+                    main_menu_text(player), reply_markup=kb_main_menu(bool(leader_id)),
+                    parse_mode="Markdown",
+                )
         else:
             await query.answer("❌ Подписка не найдена. Подпишись и попробуй снова.", show_alert=True)
         return
 
+    # ---------- регистрация ----------
     if data == "reg:start":
         await safe_delete(query.message)
-        await query.message.reply_text("📝 *РЕГИСТРАЦИЯ*\n\nШаг 1 из 2:\nВведи свой *ID в Standoff 2*\n\nПример: `1002929387`", reply_markup=kb_back_main(), parse_mode="Markdown")
+        await query.message.reply_text(
+            "📝 *РЕГИСТРАЦИЯ*\n\nШаг 1 из 2:\nВведи свой *ID в Standoff 2*\n\nПример: `1002929387`",
+            reply_markup=kb_back_main(), parse_mode="Markdown",
+        )
         context.user_data['reg_step'] = 'id'
         return
 
+    # ---------- главное меню ----------
     if data == "menu:main":
         await safe_delete(query.message)
         context.user_data.pop('reg_step', None)
         context.user_data.pop('support_mode', None)
+        context.user_data.pop('party_invite_mode', None)
         if not player or player.get("reg") != 1:
-            await query.message.reply_text("🎮 *STRANGER FACEIT*\n\nНажми кнопку для регистрации", reply_markup=kb_register(), parse_mode="Markdown")
+            await query.message.reply_text(
+                "🎮 *STRANGER FACEIT*\n\nНажми кнопку для регистрации",
+                reply_markup=kb_register(), parse_mode="Markdown",
+            )
             return
-        await query.message.reply_text(main_menu_text(player), reply_markup=kb_main_menu(), parse_mode="Markdown")
+        parties = load_parties()
+        leader_id, _ = find_party_of(parties, user.id)
+        await query.message.reply_text(
+            main_menu_text(player), reply_markup=kb_main_menu(bool(leader_id)), parse_mode="Markdown",
+        )
         return
 
+    # ---------- профиль ----------
+    if data == "menu:profile":
+        await safe_delete(query.message)
+        if not player or player.get("reg") != 1:
+            await query.message.reply_text("Сначала зарегистрируйся!", reply_markup=kb_register())
+            return
+        await query.message.reply_text(profile_text(player), reply_markup=kb_back_main(), parse_mode="Markdown")
+        return
+
+    # ---------- топ игроков ----------
+    if data == "menu:top":
+        await safe_delete(query.message)
+        sorted_players = sorted(
+            [p for p in players.values() if p.get("reg") == 1 and p.get("calib", 0) >= CALIBRATION_GAMES],
+            key=lambda x: x.get("elo", 0), reverse=True,
+        )[:10]
+        text = "🏆 *ТОП ИГРОКОВ*\n\n"
+        if not sorted_players:
+            text += "Пока нет игроков, завершивших калибровку.\n"
+        for i, p in enumerate(sorted_players, 1):
+            medal = {1: "👑", 2: "🥈", 3: "🥉"}.get(i, f"{i}.")
+            text += f"{medal} @{p['tag']}\n    📊 {p['elo']} ELO | {p['rank']}\n"
+        total = len([p for p in players.values() if p.get("reg") == 1])
+        text += f"\n📊 Всего игроков: {total}"
+        await query.message.reply_text(text, reply_markup=kb_back_main(), parse_mode="Markdown")
+        return
+
+    # ---------- поддержка ----------
+    if data == "menu:support":
+        await safe_delete(query.message)
+        context.user_data['support_mode'] = True
+        await query.message.reply_text(
+            "🆘 *ПОДДЕРЖКА*\n\nОпиши свою проблему одним сообщением.\nАдминистраторы получат уведомление.",
+            reply_markup=kb_back_main(), parse_mode="Markdown",
+        )
+        return
+
+    # ---------- пати: открыть меню ----------
+    if data == "menu:party":
+        await safe_delete(query.message)
+        if not player or player.get("reg") != 1:
+            await query.message.reply_text("Сначала зарегистрируйся!", reply_markup=kb_register())
+            return
+        parties = load_parties()
+        leader_id, party = find_party_of(parties, user.id)
+        if not party:
+            # своей пати ещё нет — лидер сам себе, пати из одного человека
+            await query.message.reply_text(
+                "🎉 *ПАТИ*\n\nТы пока не в группе.\nПригласи друга, чтобы играть в одной команде!",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Пригласить игрока", callback_data="party:invite")],
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")],
+                ]),
+                parse_mode="Markdown",
+            )
+            return
+        is_leader = (int(leader_id) == user.id)
+        text = party_text(parties, leader_id, players)
+        await query.message.reply_text(
+            text, reply_markup=kb_party_menu(is_leader, len(party["members"])), parse_mode="Markdown",
+        )
+        return
+
+    # ---------- пати: запросить ник для приглашения ----------
+    if data == "party:invite":
+        await safe_delete(query.message)
+        parties = load_parties()
+        leader_id, party = find_party_of(parties, user.id)
+        # Если пати ещё нет — создаём её с текущим пользователем как лидером.
+        if not party:
+            parties[user_id] = {"leader": user.id, "members": [user.id], "pending_invite": None}
+            save_parties(parties)
+            leader_id, party = user_id, parties[user_id]
+        if int(leader_id) != user.id:
+            await query.message.reply_text("❌ Приглашать может только лидер пати.", reply_markup=kb_back_main())
+            return
+        if len(party["members"]) >= MAX_PARTY_SIZE:
+            await query.message.reply_text("❌ Пати уже заполнена (максимум 5 человек).", reply_markup=kb_back_main())
+            return
+        context.user_data['party_invite_mode'] = True
+        await query.message.reply_text(
+            "👤 Введите юзернейм игрока, которого хотите пригласить (например: `@vasyapetlin`):",
+            reply_markup=kb_back_main(), parse_mode="Markdown",
+        )
+        return
+
+    # ---------- пати: покинуть / расформировать ----------
+    if data == "party:leave":
+        await safe_delete(query.message)
+        parties = load_parties()
+        leader_id, party = find_party_of(parties, user.id)
+        if not party:
+            await query.message.reply_text("Ты не в пати.", reply_markup=kb_back_main())
+            return
+        if int(leader_id) == user.id:
+            # лидер выходит — пати расформировывается, все уведомляются
+            for uid in party["members"]:
+                if uid != user.id:
+                    await safe_send(context.bot, uid, "🎉 Пати расформирована лидером.")
+            del parties[leader_id]
+            save_parties(parties)
+            await query.message.reply_text("🚪 Пати расформирована.", reply_markup=kb_back_main())
+        else:
+            party["members"].remove(user.id)
+            parties[leader_id] = party
+            save_parties(parties)
+            await safe_send(context.bot, int(leader_id), f"🎉 @{player['tag']} покинул(а) пати.")
+            await query.message.reply_text("🚪 Ты покинул(а) пати.", reply_markup=kb_back_main())
+        return
+
+    # ---------- пати: принять / отклонить приглашение ----------
+    if data.startswith("party_accept:") or data.startswith("party_decline:"):
+        action, leader_id_str = data.split(":", 1)
+        parties = load_parties()
+        party = parties.get(leader_id_str)
+        await safe_delete(query.message)
+
+        if not party or not party.get("pending_invite") or party["pending_invite"].get("target") != user.id:
+            await query.message.reply_text("❌ Это приглашение больше не действительно.")
+            return
+
+        leader_uid = int(leader_id_str)
+        leader_player = players.get(leader_id_str, {})
+
+        if action == "party_decline":
+            party["pending_invite"] = None
+            parties[leader_id_str] = party
+            save_parties(parties)
+            await query.message.reply_text("❌ Приглашение отклонено.", reply_markup=kb_back_main())
+            await safe_send(
+                context.bot, leader_uid,
+                f"❌ @{player['tag']} отклонил(а) приглашение в пати." if player else "Приглашение отклонено.",
+            )
+            return
+
+        # party_accept
+        if len(party["members"]) >= MAX_PARTY_SIZE:
+            await query.message.reply_text("❌ Пати уже заполнена.", reply_markup=kb_back_main())
+            party["pending_invite"] = None
+            parties[leader_id_str] = party
+            save_parties(parties)
+            return
+
+        # если игрок уже сидит соло в каком-то лобби — убираем его оттуда
+        lobbies = load_lobbies()
+        changed_lobby = False
+        for plt in PLATFORMS:
+            for i, lobby in enumerate(lobbies[plt]):
+                if user.id in lobby:
+                    lobby.remove(user.id)
+                    changed_lobby = True
+        if changed_lobby:
+            save_lobbies(lobbies)
+
+        party["members"].append(user.id)
+        party["pending_invite"] = None
+        parties[leader_id_str] = party
+        save_parties(parties)
+
+        await query.message.reply_text(
+            f"✅ Ты присоединился(-ась) к пати @{leader_player.get('tag', leader_id_str)}!",
+            reply_markup=kb_back_main(),
+        )
+        text = party_text(parties, leader_id_str, players)
+        for uid in party["members"]:
+            is_leader_uid = (uid == leader_uid)
+            await safe_send(
+                context.bot, uid, text,
+                reply_markup=kb_party_menu(is_leader_uid, len(party["members"])),
+                parse_mode="Markdown",
+            )
+        return
+
+    # ---------- выбор платформы ----------
     if data == "menu:find":
         await safe_delete(query.message)
         if not player or player.get("reg") != 1:
@@ -405,23 +973,56 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("platform:"):
         platform = data.split(":")[1]
         lobbies = load_lobbies()
+        parties = load_parties()
+        leader_id, party = find_party_of(parties, user.id)
+
+        # Если игрок — часть пати НЕ как лидер, "Найти матч" должен приводить только лидера.
+        if party and int(leader_id) != user.id:
+            await safe_delete(query.message)
+            await query.message.reply_text(
+                "❌ Только лидер пати может выбирать лобби. Дождись, пока лидер найдёт матч.",
+                reply_markup=kb_back_main(),
+            )
+            return
+
+        min_free = len(party["members"]) if party else 1
         await safe_delete(query.message)
-        await query.message.reply_text(f"📱 *{platform.upper()} ЛОББИ*", reply_markup=kb_lobbies(platform, lobbies), parse_mode="Markdown")
+        await query.message.reply_text(
+            f"📱 *{platform.upper()} ЛОББИ*" + (f"\n(нужно {min_free} свободных мест для пати)" if party else ""),
+            reply_markup=kb_lobbies(platform, lobbies, min_free_slots=min_free),
+            parse_mode="Markdown",
+        )
+        return
+
+    if data == "lobby:full":
+        await query.answer("❌ Недостаточно свободных мест в этом лобби.", show_alert=True)
         return
 
     if data.startswith("lobby:"):
         _, platform, idx_str = data.split(":")
         idx = int(idx_str)
         lobbies = load_lobbies()
-        if len(lobbies[platform][idx]) >= LOBBY_SIZE:
-            await query.answer("❌ Лобби заполнено!", show_alert=True)
+        parties = load_parties()
+        leader_id, party = find_party_of(parties, user.id)
+
+        members_to_add = party["members"] if party else [user.id]
+
+        if len(lobbies[platform][idx]) + len(members_to_add) > LOBBY_SIZE:
+            await query.answer("❌ Недостаточно места для всей пати в этом лобби!", show_alert=True)
             return
-        for p in PLATFORMS:
-            for i, lobby in enumerate(lobbies[p]):
-                if user.id in lobby:
-                    lobbies[p][i].remove(user.id)
-        lobbies[platform][idx].append(user.id)
+
+        # убираем всех участников (пати или соло-игрока) из любых других лобби на любой платформе
+        for plt in PLATFORMS:
+            for i, lobby in enumerate(lobbies[plt]):
+                for m in members_to_add:
+                    if m in lobby:
+                        lobby.remove(m)
+
+        for m in members_to_add:
+            if m not in lobbies[platform][idx]:
+                lobbies[platform][idx].append(m)
         save_lobbies(lobbies)
+
         players_list_txt = []
         for uid in lobbies[platform][idx]:
             p = players.get(str(uid), {})
@@ -432,50 +1033,52 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i, p in enumerate(players_list_txt, 1):
             text += f"{i}. {p}\n"
         text += f"\n⏳ Ожидание: {len(lobbies[platform][idx])}/{LOBBY_SIZE}"
+
         await safe_delete(query.message)
-        await query.message.reply_text(text, reply_markup=kb_in_lobby(platform, idx), parse_mode="Markdown")
+        for m in members_to_add:
+            await safe_send(context.bot, m, text, reply_markup=kb_in_lobby(platform, idx), parse_mode="Markdown")
+
         if len(lobbies[platform][idx]) >= LOBBY_SIZE:
-            await start_match(platform, idx, context)
+            await start_ready_check(platform, idx, context)
         return
 
     if data.startswith("lobby_leave:"):
         _, platform, idx_str = data.split(":")
         idx = int(idx_str)
         lobbies = load_lobbies()
-        if user.id in lobbies[platform][idx]:
-            lobbies[platform][idx].remove(user.id)
-            save_lobbies(lobbies)
+        parties = load_parties()
+        leader_id, party = find_party_of(parties, user.id)
+        members_to_remove = party["members"] if (party and int(leader_id) == user.id) else [user.id]
+
+        for m in members_to_remove:
+            if m in lobbies[platform][idx]:
+                lobbies[platform][idx].remove(m)
+        save_lobbies(lobbies)
+
         await safe_delete(query.message)
-        await query.message.reply_text("🚪 Вышел из лобби", reply_markup=kb_platforms())
+        for m in members_to_remove:
+            await safe_send(context.bot, m, "🚪 Вышел из лобби", reply_markup=kb_platforms())
         return
 
-    if data == "menu:profile":
-        await safe_delete(query.message)
-        if not player or player.get("reg") != 1:
-            await query.message.reply_text("Сначала зарегистрируйся!", reply_markup=kb_register())
+    # ---------- подтверждение готовности (ready-check) ----------
+    if data == "ready:confirm":
+        ready_state = READY_CHECKS.get(user.id)
+        if not ready_state:
+            await query.answer("❌ Для тебя сейчас нет активной проверки готовности.", show_alert=True)
             return
-        await query.message.reply_text(profile_text(player), reply_markup=kb_back_main(), parse_mode="Markdown")
-        return
-
-    if data == "menu:top":
+        rc_id = ready_state["id"]
+        rc = READY_CHECKS_BY_ID.get(rc_id)
+        if not rc or rc["status"] != "pending":
+            await query.answer("❌ Проверка готовности уже завершена.", show_alert=True)
+            return
+        rc["confirmed"].add(user.id)
         await safe_delete(query.message)
-        sorted_players = sorted([p for p in players.values() if p.get("reg") == 1 and p.get("calib", 0) >= CALIBRATION_GAMES], key=lambda x: x.get("elo", 0), reverse=True)[:10]
-        text = "🏆 *ТОП ИГРОКОВ*\n\n"
-        if not sorted_players: text += "Пока нет игроков, завершивших калибровку.\n"
-        for i, p in enumerate(sorted_players, 1):
-            medal = {1: "👑", 2: "🥈", 3: "🥉"}.get(i, f"{i}.")
-            text += f"{medal} @{p['tag']}\n    📊 {p['elo']} ELO | {p['rank']}\n"
-        total = len([p for p in players.values() if p.get("reg") == 1])
-        text += f"\n📊 Всего игроков: {total}"
-        await query.message.reply_text(text, reply_markup=kb_back_main(), parse_mode="Markdown")
+        await query.message.reply_text("✅ Готовность подтверждена! Ждём остальных...")
+        if len(rc["confirmed"]) >= len(rc["players"]):
+            await finalize_ready_check(rc_id, context)
         return
 
-    if data == "menu:support":
-        await safe_delete(query.message)
-        context.user_data['support_mode'] = True
-        await query.message.reply_text("🆘 *ПОДДЕРЖКА*\n\nОпиши свою проблему одним сообщением.\nАдминистраторы получат уведомление.", reply_markup=kb_back_main(), parse_mode="Markdown")
-        return
-
+    # ---------- вето карт ----------
     if data.startswith("veto_ban:"):
         map_name = data.split(":", 1)[1]
         veto = context.user_data.get('veto')
@@ -493,16 +1096,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             match['status'] = 'in_progress'
             context.user_data['match'] = match
             match_id = context.user_data.get('match_id')
-            final_text = f"🏆 *Матч сформирован!*\n\n🆔 {match_id}\n📍 Финальная карта: {MAP_EMOJI.get(veto['final_map'], '')} {veto['final_map']}\n\n📌 После матча капитан отправляет команду:\n`/winner ct` или `/winner t`\nа затем статистику игроков."
+            final_text = (
+                f"🏆 *Матч сформирован!*\n\n🆔 {match_id}\n"
+                f"📍 Финальная карта: {MAP_EMOJI.get(veto['final_map'], '')} {veto['final_map']}\n\n"
+                f"📌 После матча капитан отправляет команду:\n`/winner ct` или `/winner t`\n"
+                f"а затем статистику игроков."
+            )
             for uid in match.get('players', []):
                 await safe_send(context.bot, uid, final_text, parse_mode="Markdown")
             return
         next_player = players.get(veto["turn"], {})
         tag = next_player.get("tag", veto["turn"])
         available = veto["pool"]
-        await query.message.reply_text(f"🗺️ *ВЕТО*\n\nХод: @{tag}\nДоступные карты:\n" + "\n".join([f"• {MAP_EMOJI.get(m, '')} {m}" for m in available]), reply_markup=kb_veto(available), parse_mode="Markdown")
+        await query.message.reply_text(
+            f"🗺️ *ВЕТО*\n\nХод: @{tag}\nДоступные карты:\n" +
+            "\n".join([f"• {MAP_EMOJI.get(m, '')} {m}" for m in available]),
+            reply_markup=kb_veto(available), parse_mode="Markdown",
+        )
         return
 
+    # ---------- объявление победившей команды ----------
     if data.startswith("winteam:"):
         match = context.user_data.get('match')
         if not match or match.get('status') != 'awaiting_winning_team':
@@ -515,7 +1128,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['stats_mode'] = True
         context.user_data['stats_buffer'] = {}
         await safe_delete(query.message)
-        await query.message.reply_text("Теперь введи статистику каждого игрока в формате:\n`@ник убийства-смерти`\n\nНапример:\n`@Vasya 18-9`\n\nОтправляй по одному игроку за сообщение, либо пропусти статистику.", reply_markup=kb_skip_stats(), parse_mode="Markdown")
+        await query.message.reply_text(
+            "Теперь введи статистику каждого игрока в формате:\n`@ник убийства-смерти`\n\n"
+            "Например:\n`@Vasya 18-9`\n\nОтправляй по одному игроку за сообщение, либо "
+            "пропусти статистику.",
+            reply_markup=kb_skip_stats(), parse_mode="Markdown",
+        )
         return
 
     if data == "stats:skip":
@@ -523,6 +1141,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await finalize_match(update, context, skip_stats=True)
         return
 
+    # ---------- проверка результата админом ----------
     if data.startswith("admin_ok:") or data.startswith("admin_no:"):
         if user.id not in ADMIN_IDS:
             await query.answer("❌ Только для администраторов.", show_alert=True)
@@ -541,15 +1160,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_pending(pending)
             for uid, summary in record['player_results'].items():
                 p = players.get(uid)
-                if not p: continue
-                summary_text = f"✅ *Матч подтверждён администратором!*\n\n🆔 {record['match_id']}\n📍 Карта: {MAP_EMOJI.get(record['map_name'], '')} {record['map_name']}\n{'🏆 Победа' if summary['is_winner'] else '❌ Поражение'}\n"
+                if not p:
+                    continue
+                summary_text = (
+                    f"✅ *Матч подтверждён администратором!*\n\n🆔 {record['match_id']}\n"
+                    f"📍 Карта: {MAP_EMOJI.get(record['map_name'], '')} {record['map_name']}\n"
+                    f"{'🏆 Победа' if summary['is_winner'] else '❌ Поражение'}\n"
+                )
                 if summary.get('calibrating'):
                     summary_text += f"📌 Калибровка: {p['calib']}/{CALIBRATION_GAMES}\n"
                 elif summary.get('just_finished_calibration'):
                     summary_text += f"🎉 Калибровка завершена! Стартовый ELO: {summary['new_elo']}\n"
                 else:
                     summary_text += f"📊 {summary['delta']:+d} ELO → {summary['new_elo']}\n"
-                if summary.get('mvp'): summary_text += "⭐ MVP матча!\n"
+                if summary.get('mvp'):
+                    summary_text += "⭐ MVP матча!\n"
                 await safe_send(context.bot, int(uid), summary_text, parse_mode="Markdown")
             save_players(players)
             await safe_delete(query.message)
@@ -558,16 +1183,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             for uid, summary in record['player_results'].items():
                 p = players.get(uid)
-                if not p: continue
+                if not p:
+                    continue
                 snapshot = summary.get('_snapshot_before')
-                if snapshot: rollback_match_result(p, snapshot)
+                if snapshot:
+                    rollback_match_result(p, snapshot)
                 map_name = record['map_name']
                 if map_name in p.get('maps', {}):
                     if summary['is_winner']:
                         p['maps'][map_name]['wins'] = max(0, p['maps'][map_name]['wins'] - 1)
                     else:
                         p['maps'][map_name]['losses'] = max(0, p['maps'][map_name]['losses'] - 1)
-                await safe_send(context.bot, int(uid), f"❌ Результат матча {record['match_id']} отклонён администратором.\nИзменения ELO/статистики отменены.")
+                await safe_send(
+                    context.bot, int(uid),
+                    f"❌ Результат матча {record['match_id']} отклонён администратором.\n"
+                    f"Изменения ELO/статистики отменены.",
+                )
             save_players(players)
             record['status'] = 'rejected'
             pending[pending_id] = record
@@ -576,8 +1207,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(f"❌ Матч {record['match_id']} отклонён, изменения откачены.")
             return
 
+
 # ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
 STATS_LINE_RE = re.compile(r"^@?([A-Za-z0-9_]+)\s+(\d+)\s*-\s*(\d+)$")
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -585,18 +1218,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     players = load_players()
 
+    # ---------- регистрация ----------
     if context.user_data.get('reg_step'):
         step = context.user_data['reg_step']
         if step == 'id':
             if not text.isdigit() or len(text) < 9 or len(text) > 10:
-                await update.message.reply_text("❌ ID должен быть числом из 9-10 цифр!", reply_markup=kb_back_main())
+                await update.message.reply_text(
+                    "❌ ID должен быть числом из 9-10 цифр!", reply_markup=kb_back_main(),
+                )
                 return
             if find_by_sid(players, text):
                 await update.message.reply_text("❌ Этот ID уже зарегистрирован!", reply_markup=kb_back_main())
                 return
             context.user_data['reg_sid'] = text
             context.user_data['reg_step'] = 'name'
-            await update.message.reply_text("✅ ID принят!\n\nШаг 2 из 2:\nВведи свой *ник в Standoff 2*\n\nПример: `Vasya`", reply_markup=kb_back_main(), parse_mode="Markdown")
+            await update.message.reply_text(
+                "✅ ID принят!\n\nШаг 2 из 2:\nВведи свой *ник в Standoff 2*\n\nПример: `Vasya`",
+                reply_markup=kb_back_main(), parse_mode="Markdown",
+            )
             return
         if step == 'name':
             if find_by_tag(players, text):
@@ -611,25 +1250,82 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_players(players)
             context.user_data['reg_step'] = None
             context.user_data['reg_sid'] = None
-            await update.message.reply_text(f"✅ *РЕГИСТРАЦИЯ ЗАВЕРШЕНА!*\n\n👤 @{text}\n🆔 `{sid}`\n📊 Начало калибровки (0/{CALIBRATION_GAMES})\n\nДобро пожаловать в Stranger Faceit! 🎉", reply_markup=kb_main_menu(), parse_mode="Markdown")
+            await update.message.reply_text(
+                f"✅ *РЕГИСТРАЦИЯ ЗАВЕРШЕНА!*\n\n👤 @{text}\n🆔 `{sid}`\n"
+                f"📊 Начало калибровки (0/{CALIBRATION_GAMES})\n\nДобро пожаловать в Stranger Faceit! 🎉",
+                reply_markup=kb_main_menu(), parse_mode="Markdown",
+            )
             return
 
+    # ---------- ввод ника для приглашения в пати ----------
+    if context.user_data.get('party_invite_mode'):
+        context.user_data['party_invite_mode'] = False
+        target_uid = find_by_tag(players, text)
+        inviter = get_player(players, user.id)
+        if not target_uid:
+            await update.message.reply_text(
+                "❌ Игрок с таким юзернеймом не найден среди зарегистрированных в боте.",
+                reply_markup=kb_back_main(),
+            )
+            return
+        if int(target_uid) == user.id:
+            await update.message.reply_text("❌ Нельзя пригласить самого себя.", reply_markup=kb_back_main())
+            return
+
+        parties = load_parties()
+        leader_id, party = find_party_of(parties, user.id)
+        if not party or int(leader_id) != user.id:
+            await update.message.reply_text("❌ Ты не лидер пати.", reply_markup=kb_back_main())
+            return
+        if int(target_uid) in party["members"]:
+            await update.message.reply_text("❌ Этот игрок уже в твоей пати.", reply_markup=kb_back_main())
+            return
+        target_leader, target_party = find_party_of(parties, int(target_uid))
+        if target_party:
+            await update.message.reply_text("❌ Этот игрок уже состоит в другой пати.", reply_markup=kb_back_main())
+            return
+        if len(party["members"]) >= MAX_PARTY_SIZE:
+            await update.message.reply_text("❌ Пати уже заполнена.", reply_markup=kb_back_main())
+            return
+
+        party["pending_invite"] = {"target": int(target_uid), "invited_at": time.time()}
+        parties[leader_id] = party
+        save_parties(parties)
+
+        await update.message.reply_text(
+            f"✅ Приглашение отправлено игроку @{text}.", reply_markup=kb_back_main(),
+        )
+        sent = await safe_send(
+            context.bot, int(target_uid),
+            f"🎉 Игрок @{inviter['tag']} отправляет приглашение в пати.",
+            reply_markup=kb_party_invite_response(leader_id),
+        )
+        if sent is None:
+            await update.message.reply_text(
+                "⚠️ Не удалось доставить приглашение (у игрока закрыты ЛС с ботом)."
+            )
+        return
+
+    # ---------- поддержка ----------
     if context.user_data.get('support_mode'):
         player = get_player(players, user.id)
         tag = player.get("tag", user_id) if player else user_id
         target_chat = ADMIN_CHAT_ID or None
+        msg = f"🆘 *Запрос в поддержку*\n\n👤 @{tag} (ID: {user_id})\n📝 Сообщение:\n{text}"
         if target_chat:
-            await safe_send(context.bot, target_chat, f"🆘 *Запрос в поддержку*\n\n👤 @{tag} (ID: {user_id})\n📝 Сообщение:\n{text}", parse_mode="Markdown")
+            await safe_send(context.bot, target_chat, msg, parse_mode="Markdown")
         else:
             for admin_id in ADMIN_IDS:
-                await safe_send(context.bot, admin_id, f"🆘 *Запрос в поддержку*\n\n👤 @{tag} (ID: {user_id})\n📝 Сообщение:\n{text}", parse_mode="Markdown")
+                await safe_send(context.bot, admin_id, msg, parse_mode="Markdown")
         context.user_data['support_mode'] = False
         await update.message.reply_text("✅ Запрос отправлен администраторам!", reply_markup=kb_main_menu())
         return
 
+    # ---------- статистика по итогам матча ----------
     if context.user_data.get('stats_mode'):
         await handle_stats_input(update, context, text)
         return
+
 
 async def handle_stats_input(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     match = context.user_data.get('match')
@@ -639,7 +1335,10 @@ async def handle_stats_input(update: Update, context: ContextTypes.DEFAULT_TYPE,
         return
     m = STATS_LINE_RE.match(text)
     if not m:
-        await update.message.reply_text("❌ Неверный формат. Используй: `@ник убийства-смерти`\nНапример: `@Vasya 18-9`", reply_markup=kb_skip_stats(), parse_mode="Markdown")
+        await update.message.reply_text(
+            "❌ Неверный формат. Используй: `@ник убийства-смерти`\nНапример: `@Vasya 18-9`",
+            reply_markup=kb_skip_stats(), parse_mode="Markdown",
+        )
         return
     tag, kills_str, deaths_str = m.groups()
     players = load_players()
@@ -651,18 +1350,25 @@ async def handle_stats_input(update: Update, context: ContextTypes.DEFAULT_TYPE,
     buffer[uid] = {"kills": int(kills_str), "deaths": int(deaths_str)}
     remaining = [str(p) for p in match['players'] if str(p) not in buffer]
     if remaining:
-        await update.message.reply_text(f"✅ Записано: @{tag} {kills_str}-{deaths_str}\n\nОсталось игроков: {len(remaining)}\nПродолжай вводить статистику или пропусти оставшихся.", reply_markup=kb_skip_stats())
+        await update.message.reply_text(
+            f"✅ Записано: @{tag} {kills_str}-{deaths_str}\n\nОсталось игроков: {len(remaining)}\n"
+            f"Продолжай вводить статистику или пропусти оставшихся.",
+            reply_markup=kb_skip_stats(),
+        )
         return
     await finalize_match(update, context, skip_stats=False)
+
 
 # ===== ЗАВЕРШЕНИЕ МАТЧА =====
 async def finalize_match(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_stats: bool):
     match = context.user_data.get('match')
-    if not match: return
+    if not match:
+        return
     players = load_players()
     winning_team = match['team_a'] if match.get('winner_team') == 'a' else match['team_b']
     losing_team = match['team_b'] if match.get('winner_team') == 'a' else match['team_a']
     stats_buffer = context.user_data.get('stats_buffer', {}) if not skip_stats else {}
+
     mvp_uid = None
     if stats_buffer:
         best_kills = -1
@@ -671,92 +1377,241 @@ async def finalize_match(update: Update, context: ContextTypes.DEFAULT_TYPE, ski
             if s and s['kills'] > best_kills:
                 best_kills = s['kills']
                 mvp_uid = uid
+
     map_name = match.get('map')
     match_id = match.get('match_id') or gen_match_id()
     player_results = {}
     winners_card, losers_card = [], []
+
     for uid in [str(u) for u in winning_team]:
         p = players.get(uid)
-        if not p: continue
+        if not p:
+            continue
         s = stats_buffer.get(uid, {"kills": 0, "deaths": 0})
         is_mvp = (uid == mvp_uid)
         result = apply_match_result(p, True, s['kills'], s['deaths'], is_mvp)
         apply_map_result(p, map_name, True)
         player_results[uid] = {**result, "is_winner": True, "mvp": is_mvp}
-        winners_card.append({"tag": p['tag'], "kd": f"{s['kills']}/{s['deaths']}", "mvp": is_mvp, "calibrating": result['calibrating'], "delta": result['delta'], "elo": result['new_elo'] or p['elo']})
+        winners_card.append({
+            "tag": p['tag'], "kd": f"{s['kills']}/{s['deaths']}", "mvp": is_mvp,
+            "calibrating": result['calibrating'], "delta": result['delta'],
+            "elo": result['new_elo'] or p['elo'],
+        })
+
     for uid in [str(u) for u in losing_team]:
         p = players.get(uid)
-        if not p: continue
+        if not p:
+            continue
         s = stats_buffer.get(uid, {"kills": 0, "deaths": 0})
         result = apply_match_result(p, False, s['kills'], s['deaths'], False)
         apply_map_result(p, map_name, False)
         player_results[uid] = {**result, "is_winner": False, "mvp": False}
-        losers_card.append({"tag": p['tag'], "kd": f"{s['kills']}/{s['deaths']}", "calibrating": result['calibrating'], "delta": result['delta'], "elo": result['new_elo'] or p['elo']})
+        losers_card.append({
+            "tag": p['tag'], "kd": f"{s['kills']}/{s['deaths']}",
+            "calibrating": result['calibrating'], "delta": result['delta'],
+            "elo": result['new_elo'] or p['elo'],
+        })
+
     save_players(players)
     match_photo = context.user_data.get('match_photo')
     pending = load_pending()
     pending_id = match_id
-    pending[pending_id] = {"match_id": match_id, "map_name": map_name, "player_results": player_results, "status": "awaiting_review", "match_photo": match_photo}
+    pending[pending_id] = {
+        "match_id": match_id, "map_name": map_name, "player_results": player_results,
+        "status": "awaiting_review", "match_photo": match_photo,
+    }
     save_pending(pending)
-    card_report = {"match_id": match_id, "map_name": map_name, "score": None, "winners": winners_card, "losers": losers_card, "confirmed_by": None}
+
+    card_report = {
+        "match_id": match_id, "map_name": map_name, "score": None,
+        "winners": winners_card, "losers": losers_card, "confirmed_by": None,
+    }
     card_image = render_match_card(card_report)
     target_chat = ADMIN_CHAT_ID or (ADMIN_IDS[0] if ADMIN_IDS else None)
     if target_chat:
         if match_photo:
             await safe_send(context.bot, target_chat, f"📸 Скриншот результата матча {match_id}", photo=match_photo)
-        await safe_send(context.bot, target_chat, f"📋 *Матч на проверку*\n🆔 {match_id}", photo=card_image, parse_mode="Markdown", reply_markup=kb_admin_review(pending_id))
+        await safe_send(
+            context.bot, target_chat, f"📋 *Матч на проверку*\n🆔 {match_id}",
+            photo=card_image, parse_mode="Markdown", reply_markup=kb_admin_review(pending_id),
+        )
+
     context.user_data['stats_mode'] = False
     context.user_data['stats_buffer'] = {}
     context.user_data['match'] = None
     context.user_data['match_id'] = None
     context.user_data['veto'] = None
     context.user_data['match_photo'] = None
-    await update.effective_message.reply_text("✅ Результат отправлен администраторам на проверку.\nКак только матч будет подтверждён, ты получишь уведомление в ЛС.")
+    await update.effective_message.reply_text(
+        "✅ Результат отправлен администраторам на проверку.\n"
+        "Как только матч будет подтверждён, ты получишь уведомление в ЛС."
+    )
+
 
 # ===== ЗАПУСК МАТЧА =====
-async def start_match(platform: str, lobby_idx: int, context: ContextTypes.DEFAULT_TYPE):
-    lobbies = load_lobbies()
-    players_list = lobbies[platform][lobby_idx].copy()
-    lobbies[platform][lobby_idx] = []
-    save_lobbies(lobbies)
-    random.shuffle(players_list)
-    team_a = players_list[:TEAM_SIZE]
-    team_b = players_list[TEAM_SIZE:]
-    captain_a = team_a[0]
-    captain_b = team_b[0]
+def _find_subset_with_sum(groups, target_sum):
+    """
+    Перебором с бэктрекингом ищет подмножество групп (по индексам), суммарный
+    размер которых равен target_sum. Групп мало (<=10 при лобби на 10 человек
+    с MAX_PARTY_SIZE=5), поэтому полный перебор 2^n тривиален по времени.
+    Возвращает список индексов групп для команды А, либо None если не нашлось
+    (не должно происходить при валидных размерах пати <=5 и сумме групп ==10).
+    """
+    n = len(groups)
+    sizes = [len(g) for g in groups]
+
+    def backtrack(i, remaining, chosen):
+        if remaining == 0:
+            return chosen
+        if i >= n or remaining < 0:
+            return None
+        # попробовать взять группу i
+        res = backtrack(i + 1, remaining - sizes[i], chosen + [i])
+        if res is not None:
+            return res
+        # попробовать не брать группу i
+        return backtrack(i + 1, remaining, chosen)
+
+    return backtrack(0, target_sum, [])
+
+
+def _build_teams_with_parties(players_list, parties):
+    """
+    Распределяет игроков на 2 равные команды (по TEAM_SIZE), гарантированно
+    не разрывая пати. Работает через точный поиск подмножества групп с суммой
+    размеров == TEAM_SIZE, а не через жадное заполнение (жадный подход мог
+    ошибочно разрывать пати в зависимости от порядка групп).
+    """
+    groups = []
+    seen = set()
+    for uid in players_list:
+        if uid in seen:
+            continue
+        leader_id, party = find_party_of(parties, uid)
+        if party and all(m in players_list for m in party["members"]):
+            group = [m for m in party["members"] if m in players_list]
+            groups.append(group)
+            seen.update(group)
+        else:
+            groups.append([uid])
+            seen.add(uid)
+
+    random.shuffle(groups)
+    total = sum(len(g) for g in groups)
+    team_size = total // 2
+
+    chosen_indices = _find_subset_with_sum(groups, team_size)
+
+    if chosen_indices is None:
+        # Теоретически не должно случаться при MAX_PARTY_SIZE <= TEAM_SIZE,
+        # но подстрахуемся: разбиваем самую большую группу по остатку места,
+        # чтобы матч в любом случае мог стартовать.
+        logger.warning("Не удалось разбить группы на равные команды без разрыва пати — использую запасной вариант.")
+        team_a, team_b = [], []
+        for group in sorted(groups, key=len, reverse=True):
+            if len(team_a) + len(group) <= team_size:
+                team_a.extend(group)
+            elif len(team_b) + len(group) <= (total - team_size):
+                team_b.extend(group)
+            else:
+                for m in group:
+                    (team_a if len(team_a) < team_size else team_b).append(m)
+        return team_a, team_b
+
+    chosen_set = set(chosen_indices)
+    team_a = [uid for i in chosen_indices for uid in groups[i]]
+    team_b = [uid for i, g in enumerate(groups) if i not in chosen_set for uid in g]
+    return team_a, team_b
+
+
+async def start_match(platform: str, players_list: list, context: ContextTypes.DEFAULT_TYPE):
+    parties = load_parties()
+    players_list = players_list.copy()
+    team_a, team_b = _build_teams_with_parties(players_list, parties)
+
+    # Капитан команды = лидер пати внутри неё, если такой есть, иначе случайный
+    def pick_captain(team):
+        for uid in team:
+            leader_id, party = find_party_of(parties, uid)
+            if party and int(leader_id) == uid and len(party["members"]) > 1:
+                return uid
+        return random.choice(team)
+
+    captain_a = pick_captain(team_a)
+    captain_b = pick_captain(team_b)
+
     match_id = gen_match_id()
     players = load_players()
-    match = {"match_id": match_id, "platform": platform, "players": players_list, "team_a": team_a, "team_b": team_b, "captain_a": captain_a, "captain_b": captain_b, "map": None, "status": "veto", "winner_team": None, "created_at": datetime.now().isoformat()}
-    context.user_data['match'] = match
-    context.user_data['match_id'] = match_id
+    match = {
+        "match_id": match_id, "platform": platform, "players": players_list,
+        "team_a": team_a, "team_b": team_b, "captain_a": captain_a, "captain_b": captain_b,
+        "map": None, "status": "veto", "winner_team": None,
+        "created_at": datetime.now().isoformat(),
+    }
+
     veto = start_veto(str(captain_a), str(captain_b))
-    context.user_data['veto'] = veto
+
     for uid in players_list:
+        # Каждому участнику кладём одинаковое состояние матча/вето в его собственный
+        # user_data — так же, как это было в исходной версии (per-chat context).
+        # ptb хранит user_data per user_id автоматически через application.user_data.
+        udata = context.application.user_data[uid]
+        udata['match'] = match
+        udata['match_id'] = match_id
+        udata['veto'] = veto
+
         team_label = "🔵 Команда А" if uid in team_a else "🔴 Команда Б"
-        await safe_send(context.bot, uid, f"🎮 *Матч найден!*\n\n🆔 {match_id}\n📱 {platform}\n👥 Собрано 10 игроков!\nТвоя команда: {team_label}\n\nНачинается бан карт...", parse_mode="Markdown")
+        await safe_send(
+            context.bot, uid,
+            f"🎮 *Матч найден!*\n\n🆔 {match_id}\n📱 {platform}\n👥 Собрано 10 игроков!\n"
+            f"Твоя команда: {team_label}\n\nНачинается бан карт...",
+            parse_mode="Markdown",
+        )
+
     first_player = players.get(str(captain_a), {})
     tag = first_player.get("tag", str(captain_a))
     available = veto["pool"]
-    await safe_send(context.bot, captain_a, f"🗺️ *ВЕТО*\n\nХод: @{tag}\nДоступные карты:\n" + "\n".join([f"• {MAP_EMOJI.get(m, '')} {m}" for m in available]), parse_mode="Markdown", reply_markup=kb_veto(available))
+    await safe_send(
+        context.bot, captain_a,
+        f"🗺️ *ВЕТО*\n\nХод: @{tag}\nДоступные карты:\n" +
+        "\n".join([f"• {MAP_EMOJI.get(m, '')} {m}" for m in available]),
+        parse_mode="Markdown", reply_markup=kb_veto(available),
+    )
+
 
 # ===== ЗАПУСК =====
-async def main():
-    request = HTTPXRequest(connect_timeout=CONNECT_TIMEOUT, read_timeout=READ_TIMEOUT, write_timeout=WRITE_TIMEOUT, pool_timeout=POOL_TIMEOUT)
+def main():
+    request = HTTPXRequest(
+        connect_timeout=CONNECT_TIMEOUT, read_timeout=READ_TIMEOUT,
+        write_timeout=WRITE_TIMEOUT, pool_timeout=POOL_TIMEOUT,
+    )
+    
     app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("winner", winner_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
     print("🤖 Stranger Faceit запущен!")
     print(f"👑 Админы: {ADMIN_IDS}")
     print(f"🏠 Общий чат: {GENERAL_CHAT_ID}")
     print(f"🔒 Админ-чат: {ADMIN_CHAT_ID}")
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-    while True:
-        await asyncio.sleep(1)
+
+    # ===== ГЛАВНОЕ ИЗМЕНЕНИЕ ДЛЯ RENDER =====
+    # drop_pending_updates=True сбрасывает очередь старых апдейтов при старте —
+    # это лечит "залипшие" обновления после случайного дублирования инстанса.
+    # Принудительно удаляем вебхук перед запуском, чтобы гарантировать чистый старт
+    import asyncio
+    try:
+        asyncio.run(app.bot.delete_webhook())
+        print("✅ Вебхук сброшен перед запуском")
+    except:
+        pass
+    
+    app.run_polling(drop_pending_updates=True)
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
