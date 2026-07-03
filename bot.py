@@ -496,7 +496,7 @@ async def button_callback(update, context):
                 await q.message.reply_text("👑 АДМИН-ПАНЕЛЬ\n\nВыбери действие:", reply_markup=kb_admin()); return
             if action=="analytics":
                 await safe_delete(q.message)
-                a,pending=await load_analytics(),await load_pending( 
+                a,pending=await load_analytics(),await load_pending() 
                 if action == "analytics":
     await safe_delete(q.message)
     a, pending = await load_analytics(), await load_pending()
