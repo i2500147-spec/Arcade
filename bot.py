@@ -5,6 +5,7 @@ Stranger Faceit — Telegram бот для матчмейкинга в Standoff 
 Для запуска на Render.com
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -25,7 +26,7 @@ from PIL import Image, ImageDraw, ImageFont
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger("stranger_faceit")
 
-# ===== КОНФИГ (ТОКЕН ВСТАВЛЕН ПРЯМО В КОД) =====
+# ===== КОНФИГ =====
 BOT_TOKEN = "8280414108:AAElQw84k1zfKcggM1c6OQ1PjFdmWWfR2LI"
 ADMIN_IDS = [8131755675]
 GENERAL_CHAT_ID = -1004404404847
@@ -739,7 +740,7 @@ async def start_match(platform: str, lobby_idx: int, context: ContextTypes.DEFAU
     await safe_send(context.bot, captain_a, f"🗺️ *ВЕТО*\n\nХод: @{tag}\nДоступные карты:\n" + "\n".join([f"• {MAP_EMOJI.get(m, '')} {m}" for m in available]), parse_mode="Markdown", reply_markup=kb_veto(available))
 
 # ===== ЗАПУСК =====
-def main():
+async def main():
     request = HTTPXRequest(connect_timeout=CONNECT_TIMEOUT, read_timeout=READ_TIMEOUT, write_timeout=WRITE_TIMEOUT, pool_timeout=POOL_TIMEOUT)
     app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
     app.add_handler(CommandHandler("start", start))
@@ -751,7 +752,11 @@ def main():
     print(f"👑 Админы: {ADMIN_IDS}")
     print(f"🏠 Общий чат: {GENERAL_CHAT_ID}")
     print(f"🔒 Админ-чат: {ADMIN_CHAT_ID}")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    while True:
+        await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
