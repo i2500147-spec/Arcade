@@ -16,6 +16,8 @@ import string
 import sys
 import threading
 import time
+from dotenv import load_dotenv
+load_dotenv()  # Загружаем переменные из .env
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
