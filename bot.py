@@ -20,9 +20,8 @@ from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
 from logging.handlers import RotatingFileHandler
-
 from flask import Flask, jsonify
-from PIL import Image, ImageDraw, ImageFont
+# from PIL import Image, ImageDraw, ImageFont  # Временно отключено для Render
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import (
