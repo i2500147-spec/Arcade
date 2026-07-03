@@ -25,7 +25,6 @@ BOT_TOKEN, ADMIN_IDS, GENERAL_CHAT_ID, ADMIN_CHAT_ID = os.environ["BOT_TOKEN"], 
 CHAT_LINK, REQUIRE_SUBSCRIPTION, SUBSCRIPTION_CHAT_ID, OWNER_ID = os.environ.get("CHAT_LINK",""), int(os.environ.get("REQUIRE_SUBSCRIPTION","1")), int(os.environ.get("SUBSCRIPTION_CHAT_ID",str(GENERAL_CHAT_ID))), int(os.environ.get("OWNER_ID",str(ADMIN_IDS[0] if ADMIN_IDS else 0)))
 SUPABASE_URL, SUPABASE_KEY = os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"]
 
-# ===== SUPABASE =====
 async def sb(method, path, data=None):
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.request(method, f"{SUPABASE_URL}/rest/v1/{path}", headers={"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}","Content-Type":"application/json","Prefer":"return=representation"}, json=data)
@@ -47,13 +46,12 @@ async def save_lobbies(l): await sb("DELETE","lobbies?platform=neq.null"); [awai
 async def load_parties(): d=await sb("GET","parties"); return {row['leader_id']:row['data'] for row in d} if d else {}
 async def save_parties(p): await sb("DELETE","parties?leader_id=neq.null"); [await sb("POST","parties",{"leader_id":i,"data":d}) for i,d in p.items()]
 async def load_reports(): d=await sb("GET","reports"); r={}; [r.setdefault(row['target_uid'],[]).append(row['report_data']) for row in d] if d else None; return r
-async def save_reports(r): await sb("DELETE","reports?target_uid=neq.null"); [[await sb("POST","reports",{"target_uid":t,"report_data":rep}) for rep in reports] for t,reports in r.items()]
+async def save_reports(r): await sb("DELETE","reports?target_uid=neq.null"); [[await sb("POST","reports",{"target_uid":t,"data":rep}) for rep in reports] for t,reports in r.items()]
 async def load_history(): d=await sb("GET","match_history?order=id.desc&limit=100"); return {"matches":[row['data'] for row in d]} if d else {"matches":[]}
 async def append_history(e): await sb("POST","match_history",{"data":e})
 async def load_analytics(): d=await sb("GET","analytics"); a={"map_picks":{},"online_samples":[],"match_timestamps":[]}; [a.update({row['key']:row['value']}) for row in d] if d else None; return a
 async def save_analytics(a): await sb("DELETE","analytics?key=neq.null"); [await sb("POST","analytics",{"key":k,"value":v}) for k,v in a.items()]
 
-# ===== КОНСТАНТЫ =====
 MAPS, MAP_EMOJI = ["Sandstone","Rust","Province","Breeze","Dune","Zone 7","Hanami"], {m:e for m,e in zip(["Sandstone","Rust","Province","Breeze","Dune","Zone 7","Hanami"],["🏜️","🏭","🏘️","🌬️","🏝️","☢️","🌸"])}
 PLATFORMS, LOBBIES_PER_PLATFORM, LOBBY_SIZE, MAX_PARTY_SIZE = ["Phone","PC"], 6, 10, 5
 CALIBRATION_GAMES, CALIBRATION_BASE_ELO, READY_CHECK_TIMEOUT, RESULT_UNLOCK_DELAY, MAX_REPORT_LEN = 10, 500, 60, 30, 500
@@ -61,7 +59,6 @@ PREMIUM_PRICES, PREMIUM_DURATIONS = {"day":50,"week":350,"month":1000}, {"day":8
 LEVEL_THRESHOLDS, RANK_EMOJI = [(1,0,500),(2,501,750),(3,751,900),(4,901,1050),(5,1051,1200),(6,1201,1350),(7,1351,1530),(8,1531,1750),(9,1751,2000),(10,2001,10**9)], {1:"🥉",2:"🥉",3:"🥉",4:"🥈",5:"🥈",6:"🥈",7:"🥇",8:"🥇",9:"💎",10:"👑"}
 MOSCOW_TZ = timezone(timedelta(hours=3))
 
-# ===== ВСПОМОГАТЕЛЬНЫЕ =====
 def is_premium(p): return p and p.get('premium_until',0) > time.time()
 def get_premium_time_left(p): return max(0, int(p.get('premium_until',0) - time.time())) if p else 0
 def format_premium_time(s): return "не активен" if s<=0 else (f"{s//86400} дн {(s%86400)//3600} ч" if s>86400 else f"{s//3600} ч")
@@ -91,56 +88,111 @@ def apply_match_result(p,w,k,d,h,m):
     old=p["elo"]; new=max(0, old+pts); p["elo"]=new; p["level"]=level_from_elo(new); p["rank"]=rank_label(p["level"]); p.setdefault("elo_history",[]).append(new); p["elo_history"]=p["elo_history"][-30:]
     return {"delta":pts,"old_elo":old,"new_elo":new,"calibrating":False,"just_finished_calibration":False,"calib_progress":None,"_snapshot_before":snap}
 def rollback_match_result(p,s): [setattr(p,k,s[k]) for k in s]
-def apply_map_result(p,mn,w): p.setdefault("maps",{})[mn]=p.get("maps",{}).get(mn,{"wins":0,"losses":0}); p["maps"][mn]["wins"]+=1 if w else 0; p["maps"][mn]["losses"]+=0 if w else 1
+def apply_map_result(p,mn,w): p.setdefault("maps",{})[mn]=p.get("maps",{}).get(mn,{"wins":0,"losses":0}); p["maps"][mn]["wins"] += 1 if w else 0; p["maps"][mn]["losses"] += 0 if w else 1
 def elo_display(p): return f"Калибровка {p['calib']}/{CALIBRATION_GAMES}" if p["calib"]<CALIBRATION_GAMES else f"{p['rank']} {'💎' if is_premium(p) else ''}• {p['elo']} ELO"
 def gen_match_id(): return f"M-{datetime.now().strftime('%Y%m%d')}-{''.join(random.choices(string.digits,k=3))}"
 def start_veto(ca, cb): pool=MAPS.copy(); random.shuffle(pool); return {"pool":pool,"banned":[],"turn":ca,"captain_a":ca,"captain_b":cb,"final_map":None}
-def veto_ban(v,c,m): return (False,"Вето завершено.") if v["final_map"] else (False,"Не ваша очередь.") if c!=v["turn"] else (False,"Карта уже забанена.") if m not in v["pool"] else (v["pool"].remove(m) or v["banned"].append({"by":c,"map":m}) or (v.__setitem__("final_map",v["pool"][0]) if len(v["pool"])==1 else v.__setitem__("turn",v["captain_b"] if v["turn"]==v["captain_a"] else v["captain_a"])) or (True,None))
+def veto_ban(v,c,m):
+    if v["final_map"]: return False,"Вето завершено."
+    if c!=v["turn"]: return False,"Не ваша очередь."
+    if m not in v["pool"]: return False,"Карта уже забанена."
+    v["pool"].remove(m); v["banned"].append({"by":c,"map":m})
+    if len(v["pool"])==1: v["final_map"]=v["pool"][0]
+    else: v["turn"]=v["captain_b"] if v["turn"]==v["captain_a"] else v["captain_a"]
+    return True,None
 def find_party_of(parties, uid): return next(((lid,party) for lid,party in parties.items() if int(uid) in party.get("members",[])), (None,None))
 def audit_log(a,u,d): open("audit.log","a",encoding="utf-8").write(json.dumps({"timestamp":datetime.now().isoformat(),"action":a,"user_id":u,"details":d}, ensure_ascii=False)+"\n")
 def sanitize_input(t): return re.sub(r'[\x00-\x1f\x7f-\x9f]','',t).strip()[:MAX_REPORT_LEN]
 def validate_id(t): return t.isdigit() and 8 <= len(t) <= 15
-def sparkline(v): return "нет данных" if not v else (lambda b,l,h: ''.join(b[int((x-l)/(h-l)*(len(b)-1))] for x in v) if h!=l else b[3]*len(v))("▁▂▃▄▅▆▇█", min(v), max(v))
+def sparkline(v):
+    if not v: return "нет данных"
+    blocks="▁▂▃▄▅▆▇█"; lo,hi=min(v),max(v)
+    if hi==lo: return blocks[3]*len(v)
+    return ''.join(blocks[int((x-lo)/(hi-lo)*(len(blocks)-1))] for x in v)
 
-# ===== КЛАВИАТУРЫ =====
 def kb_start(): return InlineKeyboardMarkup([[InlineKeyboardButton("🔑 Вход", callback_data="auth:login")],[InlineKeyboardButton("📝 Регистрация", callback_data="auth:register")],[InlineKeyboardButton("🆘 Поддержка", callback_data="auth:support")]])
-def kb_sub(): rows=[]; [rows.append([InlineKeyboardButton("➡️ Перейти в чат", url=CHAT_LINK)]) if CHAT_LINK else None; rows.append([InlineKeyboardButton("✅ Я подписался", callback_data="sub:check")]); return InlineKeyboardMarkup(rows)
+def kb_sub():
+    rows=[]
+    if CHAT_LINK: rows.append([InlineKeyboardButton("➡️ Перейти в чат", url=CHAT_LINK)])
+    rows.append([InlineKeyboardButton("✅ Я подписался", callback_data="sub:check")])
+    return InlineKeyboardMarkup(rows)
 def kb_menu(in_party=False): return InlineKeyboardMarkup([[InlineKeyboardButton("🔍 Найти матч", callback_data="menu:find"), InlineKeyboardButton("🎉 Пати" if not in_party else "🎉 Пати (моя группа)", callback_data="menu:party")],[InlineKeyboardButton("👤 Профиль", callback_data="menu:profile"), InlineKeyboardButton("🏆 Топ", callback_data="menu:top")],[InlineKeyboardButton("📊 Статистика", callback_data="menu:stats"), InlineKeyboardButton("📝 История", callback_data="menu:history")],[InlineKeyboardButton("📢 Жалобы", callback_data="menu:complaints"), InlineKeyboardButton("💎 Премиум", callback_data="menu:premium")],[InlineKeyboardButton("🆘 Поддержка", callback_data="menu:support")]])
 def kb_back(): return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")]])
 def kb_reg_done(): return InlineKeyboardMarkup([[InlineKeyboardButton("✅ Отправить фото", callback_data="auth:send_photo")]])
 def kb_platforms(): return InlineKeyboardMarkup([[InlineKeyboardButton("📱 Phone", callback_data="platform:Phone")],[InlineKeyboardButton("💻 PC", callback_data="platform:PC")],[InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")]])
 def kb_lobbies(platform, lobbies, min_free=1):
-    rows=[]; [rows.append([InlineKeyboardButton(f"Лобби {j+1} ({len(lobbies[platform][j])}/{LOBBY_SIZE})", callback_data=f"lobby:{platform}:{j}") if LOBBY_SIZE-len(lobbies[platform][j])>=min_free else InlineKeyboardButton(f"🔒 Лобби {j+1} ({len(lobbies[platform][j])}/{LOBBY_SIZE})", callback_data="lobby:full") for j in [i, i+3] if j<6]) for i in range(3)]; rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu:find")]); return InlineKeyboardMarkup(rows)
+    rows=[]
+    for i in range(3):
+        row=[]
+        for j in [i, i+3]:
+            if j<6:
+                label=f"Лобби {j+1} ({len(lobbies[platform][j])}/{LOBBY_SIZE})"
+                if LOBBY_SIZE-len(lobbies[platform][j])>=min_free: row.append(InlineKeyboardButton(label, callback_data=f"lobby:{platform}:{j}"))
+                else: row.append(InlineKeyboardButton(f"🔒 {label}", callback_data="lobby:full"))
+        rows.append(row)
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu:find")])
+    return InlineKeyboardMarkup(rows)
 def kb_in_lobby(platform, idx): return InlineKeyboardMarkup([[InlineKeyboardButton("🚪 Выйти", callback_data=f"lobby_leave:{platform}:{idx}")]])
-def kb_veto(available): rows=[]; row=[]; [row.append(InlineKeyboardButton(f"{MAP_EMOJI.get(m,'')} {m}", callback_data=f"veto_ban:{m}")) or (len(row)==2 and (rows.append(row) or row.clear())) for m in available]; row and rows.append(row); return InlineKeyboardMarkup(rows)
+def kb_veto(available):
+    rows=[]; row=[]
+    for m in available:
+        row.append(InlineKeyboardButton(f"{MAP_EMOJI.get(m,'')} {m}", callback_data=f"veto_ban:{m}"))
+        if len(row)==2: rows.append(row); row=[]
+    if row: rows.append(row)
+    return InlineKeyboardMarkup(rows)
 def kb_skip(): return InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить статистику", callback_data="stats:skip")]])
 def kb_send(): return InlineKeyboardMarkup([[InlineKeyboardButton("📤 Отправить результаты", callback_data="result:send")]])
 def kb_admin_review(pid): return InlineKeyboardMarkup([[InlineKeyboardButton("✅ ПОДТВЕРДИТЬ", callback_data=f"admin_ok:{pid}")],[InlineKeyboardButton("❌ ОТКАЗАТЬ", callback_data=f"admin_no:{pid}")]])
-def kb_party_menu(is_leader, size): rows=[]; is_leader and size<MAX_PARTY_SIZE and rows.append([InlineKeyboardButton("➕ Пригласить игрока", callback_data="party:invite")]); rows.append([InlineKeyboardButton("🚪 Покинуть пати", callback_data="party:leave")]); rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")]); return InlineKeyboardMarkup(rows)
+def kb_party_menu(is_leader, size):
+    rows=[]
+    if is_leader and size<MAX_PARTY_SIZE: rows.append([InlineKeyboardButton("➕ Пригласить игрока", callback_data="party:invite")])
+    rows.append([InlineKeyboardButton("🚪 Покинуть пати", callback_data="party:leave")])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")])
+    return InlineKeyboardMarkup(rows)
 def kb_party_invite_response(lid): return InlineKeyboardMarkup([[InlineKeyboardButton("✅ Принять", callback_data=f"party_accept:{lid}"), InlineKeyboardButton("❌ Отказать", callback_data=f"party_decline:{lid}")]])
 def kb_ready(): return InlineKeyboardMarkup([[InlineKeyboardButton("✅ Подтвердить", callback_data="ready:confirm")]])
-def kb_players_list(items, prefix, page=0, per_page=10, back_cb="menu:main"): total=max(1,(len(items)+per_page-1)//per_page); page=max(0,min(page,total-1)); start,end=page*per_page,min((page+1)*per_page,len(items)); rows=[[InlineKeyboardButton(f"@{p.get('tag',uid)}", callback_data=f"{prefix}:{uid}:{page}")] for uid,p in items[start:end]]; nav=[]; page>0 and nav.append(InlineKeyboardButton("⬅️", callback_data=f"{prefix}_page:{page-1}")); nav.append(InlineKeyboardButton(f"{page+1}/{total}", callback_data="noop")); page<total-1 and nav.append(InlineKeyboardButton("➡️", callback_data=f"{prefix}_page:{page+1}")); nav and rows.append(nav); rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back_cb)]); return InlineKeyboardMarkup(rows)
+def kb_players_list(items, prefix, page=0, per_page=10, back_cb="menu:main"):
+    total=max(1,(len(items)+per_page-1)//per_page); page=max(0,min(page,total-1)); start,end=page*per_page,min((page+1)*per_page,len(items))
+    rows=[[InlineKeyboardButton(f"@{p.get('tag',uid)}", callback_data=f"{prefix}:{uid}:{page}")] for uid,p in items[start:end]]
+    nav=[]; page>0 and nav.append(InlineKeyboardButton("⬅️", callback_data=f"{prefix}_page:{page-1}")); nav.append(InlineKeyboardButton(f"{page+1}/{total}", callback_data="noop")); page<total-1 and nav.append(InlineKeyboardButton("➡️", callback_data=f"{prefix}_page:{page+1}")); nav and rows.append(nav); rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back_cb)])
+    return InlineKeyboardMarkup(rows)
 def kb_complaint_actions(target): return InlineKeyboardMarkup([[InlineKeyboardButton("✍️ Написать жалобу", callback_data=f"complaint_write:{target}")],[InlineKeyboardButton("👁 Посмотреть жалобы", callback_data=f"complaint_view:{target}")],[InlineKeyboardButton("⬅️ Назад", callback_data="menu:complaints")]])
 def kb_confirm(action,target): return InlineKeyboardMarkup([[InlineKeyboardButton("✅ Да", callback_data=f"{action}_yes:{target}")],[InlineKeyboardButton("❌ Нет", callback_data=f"{action}_no:{target}")]])
 def kb_premium(): return InlineKeyboardMarkup([[InlineKeyboardButton("⭐ 1 день — 50 звёзд", callback_data="premium:day")],[InlineKeyboardButton("⭐ 1 неделя — 350 звёзд", callback_data="premium:week")],[InlineKeyboardButton("⭐ 1 месяц — 1000 звёзд", callback_data="premium:month")],[InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")]])
 def kb_admin(): return InlineKeyboardMarkup([[InlineKeyboardButton("📊 Аналитика", callback_data="admin:analytics"), InlineKeyboardButton("📝 История матчей", callback_data="admin:history")],[InlineKeyboardButton("🆔 Отвязать айди", callback_data="admin:unlink"), InlineKeyboardButton("🔨 Забанить", callback_data="admin:ban")],[InlineKeyboardButton("📊 ELO", callback_data="admin:elo"), InlineKeyboardButton("✏️ Изменить ID", callback_data="admin:change_id")],[InlineKeyboardButton("✏️ Изменить ник", callback_data="admin:change_nick"), InlineKeyboardButton("📢 Жалобы (топ)", callback_data="admin:complaints_top")],[InlineKeyboardButton("🏷️ Выдать тег", callback_data="admin:give_tag")]])
 def kb_admin_elo(): return InlineKeyboardMarkup([[InlineKeyboardButton("➕ Выдать ELO", callback_data="admin:elo_add")],[InlineKeyboardButton("➖ Убавить ELO", callback_data="admin:elo_remove")],[InlineKeyboardButton("⬅️ Назад", callback_data="admin:back")]])
-def kb_history_nav(page,total): nav=[]; page>0 and nav.append(InlineKeyboardButton("⬅️", callback_data=f"admin_history_page:{page-1}")); nav.append(InlineKeyboardButton(f"{page+1}/{max(1,total)}", callback_data="noop")); page<total-1 and nav.append(InlineKeyboardButton("➡️", callback_data=f"admin_history_page:{page+1}")); rows=[nav] if nav else []; rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="admin:back")]); return InlineKeyboardMarkup(rows)
+def kb_history_nav(page,total):
+    nav=[]; page>0 and nav.append(InlineKeyboardButton("⬅️", callback_data=f"admin_history_page:{page-1}")); nav.append(InlineKeyboardButton(f"{page+1}/{max(1,total)}", callback_data="noop")); page<total-1 and nav.append(InlineKeyboardButton("➡️", callback_data=f"admin_history_page:{page+1}")); rows=[nav] if nav else []; rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="admin:back")]); return InlineKeyboardMarkup(rows)
 
-# ===== ТЕКСТЫ =====
 def main_menu_text(p): return f"🏠 ГЛАВНОЕ МЕНЮ\n\n👤 @{p.get('tag','')}\n📊 {elo_display(p)}\n🏆 Побед: {p.get('wins',0)} | Поражений: {p.get('losses',0)}\n🎯 Матчей: {p.get('matches',0)}\n{'💎 Премиум активен!' if is_premium(p) else ''}"
 def profile_text(p):
-    wr=round((p['wins']/p['matches']*100) if p['matches']>0 else 0,1); prem=f"💎 Премиум активен! (осталось {format_premium_time(get_premium_time_left(p))})" if is_premium(p) else "Нет премиума"; text=f"📊 МОЙ ПРОФИЛЬ\n\n👤 @{p['tag']}\n🆔 {p['sid']}\n🏅 {p['rank']}\n📊 {elo_display(p)}\n💎 {prem}\n\n📈 СТАТИСТИКА\n🎯 Матчей: {p['matches']}\n🏆 Побед: {p['wins']}\nПоражений: {p['losses']}\nWinrate: {wr}%\n⭐ MVP: {p['mvps']}\n"; p.get('calib',0)<CALIBRATION_GAMES and (text:=text+f"📌 Калибровка: {p['calib']}/{CALIBRATION_GAMES}\n"); text+="\n📊 ПО КАРТАМ\n"; [text:=text+f"{MAP_EMOJI.get(mn,'')} {mn}: {s['wins']}-{s['losses']} ({round(s['wins']/(s['wins']+s['losses'])*100,1)}%)\n" for mn,s in p.get('maps',{}).items() if s['wins']+s['losses']>0]; return text
+    wr=round((p['wins']/p['matches']*100) if p['matches']>0 else 0,1)
+    prem=f"💎 Премиум активен! (осталось {format_premium_time(get_premium_time_left(p))})" if is_premium(p) else "Нет премиума"
+    text=f"📊 МОЙ ПРОФИЛЬ\n\n👤 @{p['tag']}\n🆔 {p['sid']}\n🏅 {p['rank']}\n📊 {elo_display(p)}\n💎 {prem}\n\n📈 СТАТИСТИКА\n🎯 Матчей: {p['matches']}\n🏆 Побед: {p['wins']}\nПоражений: {p['losses']}\nWinrate: {wr}%\n⭐ MVP: {p['mvps']}\n"
+    if p.get('calib',0)<CALIBRATION_GAMES: text+=f"📌 Калибровка: {p['calib']}/{CALIBRATION_GAMES}\n"
+    text+="\n📊 ПО КАРТАМ\n"
+    for mn,s in p.get('maps',{}).items():
+        if s['wins']+s['losses']>0: text+=f"{MAP_EMOJI.get(mn,'')} {mn}: {s['wins']}-{s['losses']} ({round(s['wins']/(s['wins']+s['losses'])*100,1)}%)\n"
+    return text
 def extended_stats_text(p):
-    kills,deaths,hs=p.get('total_kills',0),p.get('total_deaths',0),p.get('hs_kills',0); avg_kd=round(kills/deaths,2) if deaths>0 else float(kills); fav_map,fav_games=None,0; [(fav_map:=mn) or (fav_games:=s['wins']+s['losses']) for mn,s in p.get('maps',{}).items() if s['wins']+s['losses']>fav_games]; elo_hist=p.get('elo_history',[])[-10:]; return f"📊 РАСШИРЕННАЯ СТАТИСТИКА\n\n👤 @{p['tag']}\n\n🔫 AVG KD: {avg_kd}\n🎯 HS%: {round(hs/kills*100,1) if kills>0 else 0}%\n🗺️ Любимая карта: {f'{MAP_EMOJI.get(fav_map,"")} {fav_map} ({fav_games} игр)' if fav_map else 'нет данных'}\n\n📈 ELO (последние {len(elo_hist)} матчей):\n{sparkline(elo_hist)}\n" + (f"Значения: {', '.join(str(v) for v in elo_hist)}\n" if elo_hist else "")
+    k,d,h=p.get('total_kills',0),p.get('total_deaths',0),p.get('hs_kills',0); avg_kd=round(k/d,2) if d>0 else float(k)
+    fav_map,fav_games=None,0
+    for mn,s in p.get('maps',{}).items():
+        if s['wins']+s['losses']>fav_games: fav_map,fav_games=mn,s['wins']+s['losses']
+    elo_hist=p.get('elo_history',[])[-10:]
+    return f"📊 РАСШИРЕННАЯ СТАТИСТИКА\n\n👤 @{p['tag']}\n\n🔫 AVG KD: {avg_kd}\n🎯 HS%: {round(h/k*100,1) if k>0 else 0}%\n🗺️ Любимая карта: {f'{MAP_EMOJI.get(fav_map,"")} {fav_map} ({fav_games} игр)' if fav_map else 'нет данных'}\n\n📈 ELO (последние {len(elo_hist)} матчей):\n{sparkline(elo_hist)}\n" + (f"Значения: {', '.join(str(v) for v in elo_hist)}\n" if elo_hist else "")
 def personal_history_text(uid, history):
     matches=[m for m in history.get("matches",[]) if uid in m.get("all_players",[])][-20:][::-1]
     if not matches: return "📝 ИСТОРИЯ МАТЧЕЙ\n\nПока нет сыгранных матчей."
-    lines=["📝 ИСТОРИЯ МАТЧЕЙ (последние 20)\n"]; [lines.append(f"{m['match_id']} | {MAP_EMOJI.get(m.get('map'),'')} {m.get('map')} | {'🏆 Победа' if uid in m.get('winners',[]) else '❌ Поражение'} | {m.get('stats',{}).get(uid,{}).get('kills',0)}/{m.get('stats',{}).get(uid,{}).get('deaths',0)}{' ⭐' if m.get('mvp')==uid else ''}") for m in matches]; return "\n".join(lines)
+    lines=["📝 ИСТОРИЯ МАТЧЕЙ (последние 20)\n"]
+    for m in matches:
+        lines.append(f"{m['match_id']} | {MAP_EMOJI.get(m.get('map'),'')} {m.get('map')} | {'🏆 Победа' if uid in m.get('winners',[]) else '❌ Поражение'} | {m.get('stats',{}).get(uid,{}).get('kills',0)}/{m.get('stats',{}).get(uid,{}).get('deaths',0)}{' ⭐' if m.get('mvp')==uid else ''}")
+    return "\n".join(lines)
 def admin_history_page_text(history, page, per_page=10):
-    matches=history.get("matches",[])[::-1]; total=max(1,(len(matches)+per_page-1)//per_page); start,end=page*per_page,min((page+1)*per_page,len(matches)); chunk=matches[start:end]
-    if not chunk: return "📝 ИСТОРИЯ МАТЧЕЙ (ВСЕ)\n\nНет данных.", total
-    lines=[f"📝 ИСТОРИЯ МАТЧЕЙ (ВСЕ) — стр. {page+1}/{total}\n"]; [lines.append(f"{m['match_id']} | {MAP_EMOJI.get(m.get('map'),'')} {m.get('map')} | {m.get('timestamp','')}") for m in chunk]; return "\n".join(lines), total
+    matches=history.get("matches",[])[::-1]; total=max(1,(len(matches)+per_page-1)//per_page); start,end=page*per_page,min((page+1)*per_page,len(matches))
+    if not matches[start:end]: return "📝 ИСТОРИЯ МАТЧЕЙ (ВСЕ)\n\nНет данных.", total
+    lines=[f"📝 ИСТОРИЯ МАТЧЕЙ (ВСЕ) — стр. {page+1}/{total}\n"]; [lines.append(f"{m['match_id']} | {MAP_EMOJI.get(m.get('map'),'')} {m.get('map')} | {m.get('timestamp','')}") for m in matches[start:end]]
+    return "\n".join(lines), total
 def complaint_view_text(tag, reports): return f"Жалоб на @{tag} пока нет." if not reports else f"ЖАЛОБЫ НА @{tag} ({len(reports)})\n" + "\n".join(f"• {r.get('text','')}" for r in reports)
 def premium_text(): return "💎 *ПРЕМИУМ-ПОДПИСКА*\n\n🔥 Преимущества:\n✅ Любой тег (даже занятый)\n✅ Бесплатные турниры\n✅ x2 ELO за победы\n✅ Смена ника (2 раза бесплатно, далее 50⭐)\n\n⭐ *Тарифы:*\n• 1 день — 50 звёзд\n• 1 неделя — 350 звёзд\n• 1 месяц — 1000 звёзд\n\nВыбери тариф:"
 def party_text(parties, lid, players):
@@ -148,7 +200,6 @@ def party_text(parties, lid, players):
     if not party: return None
     return "🎉 ПАТИ\n" + "\n".join(f"{'👑 ' if uid==party['leader'] else '• '}@{players.get(str(uid),{}).get('tag',str(uid))} {'💎' if is_premium(players.get(str(uid))) else ''}" for uid in party["members"]) + f"\n\nСостав: {len(party['members'])}/{MAX_PARTY_SIZE}"
 
-# ===== READY-CHECK =====
 READY_CHECKS_BY_ID, READY_CHECKS, _rc_counter = {}, {}, 0
 async def start_ready_check(platform, lobby_idx, context):
     lobbies=await load_lobbies(); players_list=lobbies[platform][lobby_idx].copy(); lobbies[platform][lobby_idx]=[]; await save_lobbies(lobbies)
@@ -172,7 +223,6 @@ async def finalize_ready_check(rc_id, context, timed_out=False):
         return
     await start_match(rc["platform"], rc["players"], context)
 
-# ===== ОСНОВНЫЕ ФУНКЦИИ =====
 async def safe_delete(msg):
     try: await msg.delete()
     except: pass
@@ -187,8 +237,7 @@ async def is_subscribed(bot, uid):
     except: return True
 async def check_banned(update):
     p=get_player(await load_players(), update.effective_user.id)
-    if p and p.get('ban'):
-        await update.effective_message.reply_text("⛔ Вы забанены."); return True
+    if p and p.get('ban'): await update.effective_message.reply_text("⛔ Вы забанены."); return True
     return False
 async def require_subscription(update, context):
     if REQUIRE_SUBSCRIPTION and not await is_subscribed(context.bot, update.effective_user.id):
@@ -200,7 +249,6 @@ async def update_lobby_for_all(platform, idx, context):
     text=f"📋 ЛОББИ {idx+1} ({len(players_list)}/{LOBBY_SIZE})\n\nИГРОКИ:\n" + "\n".join(f"{i}. {p}" for i,p in enumerate(lines,1)) + f"\n\nОжидание: {len(players_list)}/{LOBBY_SIZE}"
     [await safe_send(context.bot, uid, text, reply_markup=kb_in_lobby(platform, idx)) for uid in players_list]
 
-# ===== /start /admin /winner =====
 async def start(update, context):
     if await check_banned(update) or not await require_subscription(update, context): return
     p=get_player(await load_players(), update.effective_user.id)
@@ -222,7 +270,6 @@ async def winner_command(update, context):
     context.user_data['match']=match
     await update.message.reply_text(f"✅ Победила сторона: {args[0].upper()}\n\nКакая команда играла за {args[0].upper()} и победила?", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔵 Команда А", callback_data="winteam:a"), InlineKeyboardButton("🔴 Команда Б", callback_data="winteam:b")]]))
 
-# ===== CALLBACK (основной) =====
 async def button_callback(update, context):
     try:
         q=update.callback_query; await q.answer(); user, data = q.from_user, q.data
@@ -442,7 +489,6 @@ async def button_callback(update, context):
         if data=="stats:skip": await safe_delete(q.message); await finalize_match(update, context, skip_stats=True); return
         if data=="result:send": await q.answer(); return
 
-        # ===== АДМИН-ПАНЕЛЬ =====
         if user.id == OWNER_ID and data.startswith("admin:"):
             action=data.split(":",1)[1]
             if action=="back":
@@ -457,7 +503,12 @@ async def button_callback(update, context):
                 avg_elo=round(sum(elos)/len(elos),1) if elos else 0
                 hours=[]; [hours.append(datetime.fromisoformat(ts).hour) for ts in a.get("match_timestamps",[]) if ts]; peak_hour=Counter(hours).most_common(1)[0][0] if hours else None
                 reports=await load_reports(); categories={"читер":0,"оскорбления":0,"слив":0,"афк":0,"токсик":0,"другое":0}; keywords={"читер":["чит","aim","wallhack","аим","вх"],"оскорбления":["оскорб","мат","хам"],"слив":["слил","слив","throw"],"афк":["афк","afk","не играл"],"токсик":["токсич","токсик"]}
-                [[(categories.__setitem__(cat, categories[cat]+1) or setattr(matched:=True)) for cat,kws in keywords.items() if any(k in r.get("text","").lower() for k in kws)] or (not matched and categories.__setitem__("другое", categories["другое"]+1)) for lst in reports.values() for r in lst]
+                for lst in reports.values():
+                    for r in lst:
+                        t=r.get("text","").lower(); matched=False
+                        for cat,kws in keywords.items():
+                            if any(k in t for k in kws): categories[cat]+=1; matched=True; break
+                        if not matched: categories["другое"]+=1
                 text=f"📊 АНАЛИТИКА\n\n🗺️ Карта: {MAP_EMOJI.get(top_map,'')} {top_map}\n👥 Средний онлайн: {avg_online}\n📈 Средний ELO: {avg_elo}\n⏰ Пиковое время: {f'{peak_hour}:00 - {(peak_hour+1)%24}:00 (МСК)' if peak_hour else 'нет данных'}\n🎮 Активных матчей: {sum(1 for v in pending.values() if v.get('status')=='awaiting_review')}\n\n📢 Топ жалоб:\n" + "\n".join(f"  • {c}: {n}" for c,n in sorted(categories.items(), key=lambda x:x[1], reverse=True) if n>0)
                 await q.message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin:back")]])); return
             if action=="complaints_top":
@@ -587,9 +638,10 @@ async def button_callback(update, context):
                 await save_players(players_data); record['status']='rejected'; pending[pid]=record; await save_pending(pending)
                 await safe_delete(q.message); await q.message.reply_text(f"❌ Матч {record['match_id']} отклонён.")
     except Exception as e:
-        logger.error(f"Ошибка в button_callback: {e}"); [await update.callback_query.message.reply_text("❌ Произошла ошибка. Попробуйте снова.") for _ in [0]]
+        logger.error(f"Ошибка в button_callback: {e}")
+        try: await update.callback_query.message.reply_text("❌ Произошла ошибка. Попробуйте снова.")
+        except: pass
 
-# ===== ФОТО, ПЛАТЕЖИ, ПОИСК =====
 async def handle_photo(update, context):
     if await check_banned(update): return
     if context.user_data.get('auth_step') == 'reg_photo':
@@ -607,6 +659,7 @@ async def handle_photo(update, context):
     if time.time() < match.get('result_unlock_time',0): return await update.message.reply_text(f"⏳ Отправка доступна через {int(match['result_unlock_time']-time.time())} сек.")
     context.user_data['match_photo']=update.message.photo[-1].file_id
     await update.message.reply_text("✅ Скриншот принят!\n\nТеперь объяви победившую сторону:\n/winner ct или /winner t")
+
 async def pre_checkout_query(update, context): await update.pre_checkout_query.answer(ok=True)
 async def successful_payment(update, context):
     payload=update.message.successful_payment.invoice_payload
@@ -616,13 +669,12 @@ async def successful_payment(update, context):
     p=get_player(await load_players(), update.effective_user.id)
     if p:
         p['premium_until']=int(time.time())+PREMIUM_DURATIONS[period]; await save_players(await load_players())
-        await update.message.reply_text(f"✅ Премиум-подписка активирована!\n\n📅 Период: {{'day':'1 день','week':'1 неделя','month':'1 месяц'}}[period]\n💎 Теперь тебе доступны:\n• x2 ELO\n• Любой тег\n• Бесплатные турниры\n• Смена ника (2 раза бесплатно, далее 50⭐)")
+        await update.message.reply_text(f"✅ Премиум-подписка активирована!\n\n📅 Период: {'день' if period=='day' else 'неделя' if period=='week' else 'месяц'}\n💎 Теперь тебе доступны:\n• x2 ELO\n• Любой тег\n• Бесплатные турниры\n• Смена ника (2 раза бесплатно, далее 50⭐)")
     else: await update.message.reply_text("❌ Ошибка: игрок не найден.")
 async def _notify_result_ready(host_id, match_id, context):
     await asyncio.sleep(RESULT_UNLOCK_DELAY)
     if host_id: await safe_send(context.bot, host_id, f"📤 Можешь отправить скриншот результата матча {match_id}, затем /winner ct или /winner t.", reply_markup=kb_send())
 
-# ===== ЗАПУСК МАТЧА =====
 def find_subset_with_sum(groups, target):
     n=len(groups); sizes=[len(g) for g in groups]
     def backtrack(i, rem, chosen):
@@ -664,7 +716,6 @@ async def start_match(platform, players_list, context):
         await safe_send(context.bot, uid, f"🎮 Матч найден!\n\nID: {match_id}\nПлатформа: {platform}\nСобрано 10 игроков!\nТвоя команда: {'🔵 Команда А' if uid in team_a else '🔴 Команда Б'}{'\n🖥️ Ты хост этого матча!' if uid == host else ''}\n\nНачинается бан карт...")
     await safe_send(context.bot, captain_a, f"🗺️ ВЕТО\n\nХод: @{players.get(str(captain_a),{}).get('tag', captain_a)}\nДоступные карты:\n" + "\n".join(f"• {MAP_EMOJI.get(m,'')} {m}" for m in veto["pool"]), reply_markup=kb_veto(veto["pool"]))
 
-# ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
 STATS_LINE_RE = re.compile(r"^@?([A-Za-z0-9_]+)\s+(\d+)\s*-\s*(\d+)(?:\s*-\s*(\d+))?$")
 async def handle_message(update, context):
     try:
@@ -819,7 +870,6 @@ async def finalize_match(update, context, skip_stats):
     context.user_data['stats_mode'], context.user_data['stats_buffer'], context.user_data['match'], context.user_data['match_id'], context.user_data['veto'], context.user_data['match_photo'] = False, {}, None, None, None, None
     await update.effective_message.reply_text("✅ Результат отправлен админам на проверку.\nКак только подтвердят — получишь уведомление.")
 
-# ===== HEALTH CHECK & ЗАПУСК =====
 app_flask = Flask(__name__); start_time=time.time()
 @app_flask.route('/health')
 def health(): return jsonify({'status':'ok','timestamp':datetime.now().isoformat(),'players':len(asyncio.run(load_players())),'uptime_seconds':int(time.time()-start_time)})
@@ -834,7 +884,14 @@ def main():
     os.makedirs("backups", exist_ok=True); os.makedirs("logs", exist_ok=True)
     threading.Thread(target=run_health_server, daemon=True).start()
     app = ApplicationBuilder().token(BOT_TOKEN).request(HTTPXRequest(connect_timeout=120, read_timeout=120, write_timeout=120, pool_timeout=120)).build()
-    [app.add_handler(h) for h in [CommandHandler("start", start), CommandHandler("winner", winner_command), CommandHandler("admin", admin_command), CallbackQueryHandler(button_callback), MessageHandler(filters.PHOTO, handle_photo), MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message), PreCheckoutQueryHandler(pre_checkout_query), MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment)]]
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("winner", winner_command))
+    app.add_handler(CommandHandler("admin", admin_command))
+    app.add_handler(CallbackQueryHandler(button_callback))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(PreCheckoutQueryHandler(pre_checkout_query))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_error_handler(lambda u,c: logger.error(f"Update {u} вызвал ошибку: {c.error}", exc_info=True))
     logger.info("="*50); logger.info("🤖 Stranger Faceit 3.5 запущен!"); logger.info(f"👑 Админы: {ADMIN_IDS}"); logger.info(f"👑 Владелец: {OWNER_ID}"); logger.info(f"🏠 Общий чат: {GENERAL_CHAT_ID}"); logger.info(f"🔒 Админ-чат: {ADMIN_CHAT_ID}"); logger.info("="*50)
     app.run_polling(drop_pending_updates=True)
