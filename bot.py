@@ -19,7 +19,6 @@ from telegram.ext import (
     filters,
 )
 from google import genai
-import PIL.Image
 
 # ============================================================
 # CONFIG
@@ -35,7 +34,7 @@ OWNER_ID = int(os.environ.get("OWNER_ID", "0") or 0)
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-# Gemini AI
+# Gemini AI Client
 gemini_client = genai.Client()
 
 MAPS = ["Sandstone", "Rust", "Province", "Breeze", "Dune", "Zone 7", "Hanami"]
@@ -165,30 +164,24 @@ def format_premium_status(player):
         return "нет"
 
 # ============================================================
-# GEMINI AI CHECK
+# GEMINI AI CHECK (БЕЗ PILLOW)
 # ============================================================
 
 async def check_profile_with_gemini(photo_id, expected_id, expected_nick, context):
-    """Проверяет скриншот профиля через Gemini AI"""
+    """Проверяет скриншот профиля через Gemini AI (без Pillow)"""
     try:
-        # Скачиваем фото
+        # Скачиваем фото как байты
         file = await context.bot.get_file(photo_id)
-        file_path = f"temp_{int(time.time())}.jpg"
-        await file.download_to_drive(file_path)
+        file_bytes = await file.download_as_bytearray()
         
-        # Открываем изображение
-        img = PIL.Image.open(file_path)
-        
-        # Отправляем в Gemini
+        # Отправляем байты напрямую в Gemini
         response = gemini_client.interactions.create(
             model="gemini-2.0-flash-exp",
             input=[
                 "На этом скриншоте из игры Standoff 2 найди ID игрока (8-15 цифр) и его ник. Ответь строго в формате: ID: [цифры] | Ник: [текст]",
-                img
+                file_bytes
             ]
         )
-        
-        os.remove(file_path)
         
         # Парсим ответ
         text = response.output_text
@@ -531,7 +524,7 @@ async def handle_register_step(update, context, step, text):
         await update.message.reply_text("📷 Отправьте скриншот профиля:")
 
 # ============================================================
-# REGISTER PHOTO WITH AI
+# REGISTER PHOTO WITH AI (БЕЗ PILLOW)
 # ============================================================
 
 async def handle_register_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
