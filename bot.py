@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Stranger Faceit — Telegram бот для матчмейкинга в Standoff 2.
-Версия: 2.0 (безопасная и стабильная)
+Версия: 2.1 (с админ-панелью, обновлением лобби и приглашением по Telegram)
 """
 
 import asyncio
@@ -16,8 +16,6 @@ import string
 import sys
 import threading
 import time
-from dotenv import load_dotenv
-load_dotenv()  # Загружаем переменные из .env
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
@@ -32,6 +30,9 @@ from telegram.ext import (
     MessageHandler, ContextTypes, filters,
 )
 from telegram.request import HTTPXRequest
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
 os.makedirs("logs", exist_ok=True)
@@ -39,15 +40,13 @@ os.makedirs("logs", exist_ok=True)
 logger = logging.getLogger("stranger_faceit")
 logger.setLevel(logging.INFO)
 
-# Консольный вывод
 console = logging.StreamHandler(sys.stdout)
 console.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 logger.addHandler(console)
 
-# Файловый вывод с ротацией
 file_handler = RotatingFileHandler(
     "logs/bot.log",
-    maxBytes=10*1024*1024,  # 10 MB
+    maxBytes=10*1024*1024,
     backupCount=5
 )
 file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
@@ -66,6 +65,7 @@ ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID"))
 CHAT_LINK = os.environ.get("CHAT_LINK", "")
 REQUIRE_SUBSCRIPTION = int(os.environ.get("REQUIRE_SUBSCRIPTION", "1"))
 SUBSCRIPTION_CHAT_ID = int(os.environ.get("SUBSCRIPTION_CHAT_ID", str(GENERAL_CHAT_ID)))
+OWNER_ID = int(os.environ.get("OWNER_ID", ADMIN_IDS[0] if ADMIN_IDS else 0))
 
 # ===== КОНСТАНТЫ =====
 DATA_FILE = "players.json"
@@ -130,7 +130,6 @@ def _load_json(path, default):
                 return json.load(f)
         except (json.JSONDecodeError, IOError) as e:
             logger.error(f"Ошибка чтения {path}: {e}")
-            # Пытаемся восстановить из бэкапа
             backup_path = f"backups/{os.path.basename(path).replace('.json', '')}_latest.json"
             if os.path.exists(backup_path):
                 logger.info(f"Восстанавливаем из бэкапа {backup_path}")
@@ -145,7 +144,7 @@ def _save_json(path, data):
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             os.replace(tmp_path, path)
-            backup_data()  # Автоматический бэкап
+            backup_data()
         except Exception as e:
             logger.error(f"Ошибка сохранения {path}: {e}")
             if os.path.exists(tmp_path):
@@ -183,7 +182,6 @@ def save_parties(p):
     _save_json(PARTIES_FILE, p)
 
 def get_players_cached():
-    """Получение игроков с кэшированием"""
     now = time.time()
     if PLAYER_CACHE["data"] and (now - PLAYER_CACHE["timestamp"] < PLAYER_CACHE["ttl"]):
         return PLAYER_CACHE["data"].copy()
@@ -198,7 +196,6 @@ def invalidate_cache():
     PLAYER_CACHE["timestamp"] = 0
 
 def backup_data():
-    """Создание бэкапа данных"""
     backup_dir = "backups"
     os.makedirs(backup_dir, exist_ok=True)
     
@@ -211,7 +208,6 @@ def backup_data():
             backup_name = f"{backup_dir}/{name}_{timestamp}.json"
             shutil.copy2(file, backup_name)
     
-    # Оставляем только 5 последних бэкапов
     backups = sorted([f for f in os.listdir(backup_dir) if f.endswith('.json')])
     if len(backups) > 5:
         for old_file in backups[:-5]:
@@ -226,7 +222,6 @@ def find_party_of(parties, user_id):
 
 # ===== АУДИТ =====
 def audit_log(action: str, user_id: int, details: dict):
-    """Логирование действий администраторов"""
     log_entry = {
         "timestamp": datetime.now().isoformat(),
         "action": action,
@@ -241,12 +236,10 @@ def audit_log(action: str, user_id: int, details: dict):
 
 # ===== ВАЛИДАЦИЯ =====
 def sanitize_input(text: str) -> str:
-    """Очистка ввода от опасных символов"""
     text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
     return text.strip()[:100]
 
 def validate_standoff_id(id_text: str) -> bool:
-    """Проверка ID Standoff 2"""
     if not id_text.isdigit():
         return False
     if len(id_text) < 8 or len(id_text) > 15:
@@ -254,11 +247,9 @@ def validate_standoff_id(id_text: str) -> bool:
     return True
 
 def validate_username(username: str) -> bool:
-    """Проверка ника"""
     return bool(re.match(r'^[A-Za-z0-9_]{3,20}$', username))
 
 def is_banned(player) -> bool:
-    """Проверка бана"""
     if not player or not player.get('ban'):
         return False
     ban_until = player['ban']
@@ -267,11 +258,12 @@ def is_banned(player) -> bool:
     return False
 
 # ===== ИГРОКИ =====
-def new_player(sid):
+def new_player(sid, tg_username):
     return {
-        "reg": 0, "sid": sid, "name": "", "tag": "", "elo": 0, "level": 0,
-        "wins": 0, "losses": 0, "matches": 0, "mvps": 0, "rank": "🎯", "ban": None,
-        "history": [], "maps": {m: {"wins": 0, "losses": 0} for m in MAPS},
+        "reg": 0, "sid": sid, "name": "", "tag": "", "tg_username": tg_username,
+        "elo": 0, "level": 0, "wins": 0, "losses": 0, "matches": 0, "mvps": 0,
+        "rank": "🎯", "ban": None, "history": [],
+        "maps": {m: {"wins": 0, "losses": 0} for m in MAPS},
         "calib": 0, "calib_elo_buffer": 0, "platform": None,
     }
 
@@ -288,6 +280,14 @@ def find_by_tag(players, tag):
     tag_clean = tag.lstrip("@").lower()
     for uid, p in players.items():
         if p.get("tag", "").lower() == tag_clean:
+            return uid
+    return None
+
+def find_by_telegram_username(players, username):
+    """Поиск игрока по Telegram username"""
+    username_clean = username.lstrip("@").lower()
+    for uid, p in players.items():
+        if p.get("tg_username", "").lower() == username_clean:
             return uid
     return None
 
@@ -512,15 +512,20 @@ def kb_platforms():
     ])
 
 def kb_lobbies(platform, lobbies, min_free_slots=1):
+    """Лобби в 2 колонки: 1-4, 2-5, 3-6"""
     rows = []
-    for i in range(LOBBIES_PER_PLATFORM):
-        count = len(lobbies[platform][i])
-        free = LOBBY_SIZE - count
-        label = f"Лобби {i + 1} ({count}/{LOBBY_SIZE})"
-        if free >= min_free_slots:
-            rows.append([InlineKeyboardButton(label, callback_data=f"lobby:{platform}:{i}")])
-        else:
-            rows.append([InlineKeyboardButton(f"🔒 {label}", callback_data="lobby:full")])
+    for i in range(3):  # 3 ряда
+        row = []
+        for j in [i, i + 3]:  # Лобби 1 и 4, 2 и 5, 3 и 6
+            if j < LOBBIES_PER_PLATFORM:
+                count = len(lobbies[platform][j])
+                free = LOBBY_SIZE - count
+                label = f"Лобби {j + 1} ({count}/{LOBBY_SIZE})"
+                if free >= min_free_slots:
+                    row.append(InlineKeyboardButton(label, callback_data=f"lobby:{platform}:{j}"))
+                else:
+                    row.append(InlineKeyboardButton(f"🔒 {label}", callback_data="lobby:full"))
+        rows.append(row)
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu:find")])
     return InlineKeyboardMarkup(rows)
 
@@ -567,6 +572,58 @@ def kb_party_invite_response(leader_id):
 def kb_ready_check():
     return InlineKeyboardMarkup([[InlineKeyboardButton("✅ Подтвердить", callback_data="ready:confirm")]])
 
+# ===== АДМИН-КЛАВИАТУРЫ =====
+def kb_admin_panel():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📊 ELO", callback_data="admin_elo")],
+        [InlineKeyboardButton("✏️ Изменить ID", callback_data="admin_change_id")],
+        [InlineKeyboardButton("✏️ Изменить ник", callback_data="admin_change_nick")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="menu:main")],
+    ])
+
+def kb_admin_elo_action():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Выдать ELO", callback_data="admin_elo_add")],
+        [InlineKeyboardButton("➖ Убавить ELO", callback_data="admin_elo_remove")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="admin_back")],
+    ])
+
+def kb_admin_player_list(players, action, page=0):
+    """Список игроков для админ-действий (постранично, по 10)"""
+    items_per_page = 10
+    total_pages = (len(players) + items_per_page - 1) // items_per_page
+    
+    if page >= total_pages:
+        page = total_pages - 1
+    if page < 0:
+        page = 0
+    
+    start = page * items_per_page
+    end = min(start + items_per_page, len(players))
+    
+    keyboard = []
+    for i in range(start, end):
+        p = players[i]
+        keyboard.append([
+            InlineKeyboardButton(
+                f"@{p['tag']} ({p['elo']} ELO)",
+                callback_data=f"admin_player:{action}:{p['user_id']}:{page}"
+            )
+        ])
+    
+    # Навигация
+    nav_row = []
+    if page > 0:
+        nav_row.append(InlineKeyboardButton("⬅️", callback_data=f"admin_page:{action}:{page-1}"))
+    nav_row.append(InlineKeyboardButton(f"{page+1}/{total_pages}", callback_data="admin_page_info"))
+    if page < total_pages - 1:
+        nav_row.append(InlineKeyboardButton("➡️", callback_data=f"admin_page:{action}:{page+1}"))
+    if nav_row:
+        keyboard.append(nav_row)
+    
+    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="admin_back")])
+    return InlineKeyboardMarkup(keyboard)
+
 # ===== ВСПОМОГАТЕЛЬНОЕ =====
 async def safe_delete(message):
     if message is None:
@@ -597,7 +654,6 @@ async def is_subscribed(bot, user_id):
         return True
 
 async def check_banned(update: Update) -> bool:
-    """Проверка бана пользователя"""
     players = get_players_cached()
     player = get_player(players, update.effective_user.id)
     if is_banned(player):
@@ -608,7 +664,6 @@ async def check_banned(update: Update) -> bool:
     return False
 
 async def require_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Проверка подписки"""
     if REQUIRE_SUBSCRIPTION and not await is_subscribed(context.bot, update.effective_user.id):
         await update.effective_message.reply_text(
             "📢 Подпишись на наш чат, чтобы использовать бота!",
@@ -616,6 +671,32 @@ async def require_subscription(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return False
     return True
+
+async def update_lobby_for_all(platform: str, lobby_idx: int, context: ContextTypes.DEFAULT_TYPE):
+    """Обновление лобби для всех участников"""
+    lobbies = load_lobbies()
+    players_list = lobbies[platform][lobby_idx]
+    players = get_players_cached()
+    
+    players_list_txt = []
+    for uid in players_list:
+        p = players.get(str(uid), {})
+        tag = p.get("tag", str(uid))
+        elo = p.get("elo", 0)
+        players_list_txt.append(f"@{tag} ({elo} ELO)")
+    
+    text = f"📋 *ЛОББИ {lobby_idx + 1}* ({len(players_list)}/{LOBBY_SIZE})\n\n👥 *ИГРОКИ:*\n"
+    for i, p in enumerate(players_list_txt, 1):
+        text += f"{i}. {p}\n"
+    text += f"\n⏳ Ожидание: {len(players_list)}/{LOBBY_SIZE}"
+    
+    for uid in players_list:
+        await safe_send(
+            context.bot, uid,
+            text,
+            reply_markup=kb_in_lobby(platform, lobby_idx),
+            parse_mode="Markdown"
+        )
 
 def main_menu_text(player):
     return (
@@ -664,7 +745,7 @@ def party_text(parties, leader_id, players):
     lines.append(f"\n👥 Состав: {len(party['members'])}/{MAX_PARTY_SIZE}")
     return "\n".join(lines)
 
-# ===== READY-CHECK (без JobQueue) =====
+# ===== READY-CHECK =====
 READY_CHECKS_BY_ID = {}
 READY_CHECKS = {}
 _rc_counter = 0
@@ -675,7 +756,6 @@ def _next_rc_id():
     return f"rc{_rc_counter}"
 
 async def ready_check_timer(rc_id: str, timeout: int, context: ContextTypes.DEFAULT_TYPE):
-    """Таймер для ready-check через asyncio.sleep"""
     await asyncio.sleep(timeout)
     rc = READY_CHECKS_BY_ID.get(rc_id)
     if rc and rc["status"] == "pending":
@@ -705,7 +785,6 @@ async def start_ready_check(platform: str, lobby_idx: int, context: ContextTypes
             reply_markup=kb_ready_check(), parse_mode="Markdown",
         )
 
-    # Запускаем таймер через asyncio
     asyncio.create_task(ready_check_timer(rc_id, READY_CHECK_TIMEOUT_SECONDS, context))
 
 async def finalize_ready_check(rc_id: str, context: ContextTypes.DEFAULT_TYPE, timed_out: bool = False):
@@ -731,13 +810,7 @@ async def finalize_ready_check(rc_id: str, context: ContextTypes.DEFAULT_TYPE, t
         lobbies[rc["platform"]][rc["lobby_idx"]] = confirmed.copy()
         save_lobbies(lobbies)
         for uid in confirmed:
-            count = len(confirmed)
-            await safe_send(
-                context.bot, uid,
-                f"⚠️ Не все игроки подтвердили готовность. Матч отменён.\n"
-                f"Ты остаёшься в лобби {rc['lobby_idx'] + 1} ({count}/{LOBBY_SIZE}).",
-                reply_markup=kb_in_lobby(rc["platform"], rc["lobby_idx"]),
-            )
+            await update_lobby_for_all(rc["platform"], rc["lobby_idx"], context)
         return
 
     await start_match(rc["platform"], rc["players"], context)
@@ -773,6 +846,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
     )
 
+# ===== КОМАНДА /ADMIN =====
+async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Админ-панель"""
+    if update.effective_user.id != OWNER_ID:
+        await update.message.reply_text("❌ Доступ запрещен. Только для владельца.")
+        return
+    
+    await update.message.reply_text(
+        "👑 *АДМИН-ПАНЕЛЬ*\n\nВыбери действие:",
+        reply_markup=kb_admin_panel(),
+        parse_mode="Markdown"
+    )
+
+# ===== ОБРАБОТЧИК ФОТО =====
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not rate_limiter.is_allowed(update.effective_user.id):
         await update.message.reply_text("⚠️ Слишком много запросов. Подождите 1 минуту.")
@@ -790,9 +877,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not photo_sizes:
         return
     
-    # Проверяем размер файла
     file = await context.bot.get_file(photo_sizes[-1].file_id)
-    if file.file_size > 5 * 1024 * 1024:  # 5 MB
+    if file.file_size > 5 * 1024 * 1024:
         await update.message.reply_text("❌ Слишком большой файл (макс 5 MB)")
         return
     
@@ -804,6 +890,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
     )
 
+# ===== КОМАНДА /WINNER =====
 async def winner_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not rate_limiter.is_allowed(update.effective_user.id):
         await update.message.reply_text("⚠️ Слишком много запросов. Подождите 1 минуту.")
@@ -841,6 +928,7 @@ async def winner_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=kb, parse_mode="Markdown",
     )
 
+# ===== CALLBACK ОБРАБОТЧИК =====
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not rate_limiter.is_allowed(update.effective_user.id):
@@ -894,6 +982,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop('reg_step', None)
             context.user_data.pop('support_mode', None)
             context.user_data.pop('party_invite_mode', None)
+            context.user_data.pop('admin_action', None)
+            context.user_data.pop('admin_target', None)
             if not player or player.get("reg") != 1:
                 await query.message.reply_text(
                     "🎮 *STRANGER FACEIT*\n\nНажми кнопку для регистрации",
@@ -944,6 +1034,136 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # ===== АДМИН-ПАНЕЛЬ =====
+        if data == "admin_back":
+            await safe_delete(query.message)
+            context.user_data.pop('admin_action', None)
+            context.user_data.pop('admin_target', None)
+            context.user_data.pop('admin_page', None)
+            await query.message.reply_text(
+                "👑 *АДМИН-ПАНЕЛЬ*\n\nВыбери действие:",
+                reply_markup=kb_admin_panel(),
+                parse_mode="Markdown"
+            )
+            return
+
+        if data == "admin_elo":
+            await safe_delete(query.message)
+            await query.message.reply_text(
+                "📊 *УПРАВЛЕНИЕ ELO*\n\nВыбери действие:",
+                reply_markup=kb_admin_elo_action(),
+                parse_mode="Markdown"
+            )
+            return
+
+        if data == "admin_elo_add" or data == "admin_elo_remove":
+            action = "add" if data == "admin_elo_add" else "remove"
+            context.user_data['admin_action'] = f"elo_{action}"
+            
+            # Список игроков
+            all_players = []
+            for uid, p in players.items():
+                if p.get("reg") == 1:
+                    all_players.append({
+                        "user_id": uid,
+                        "tag": p.get("tag", str(uid)),
+                        "elo": p.get("elo", 0)
+                    })
+            all_players.sort(key=lambda x: x['elo'], reverse=True)
+            
+            context.user_data['admin_player_list'] = all_players
+            context.user_data['admin_page'] = 0
+            
+            await safe_delete(query.message)
+            await query.message.reply_text(
+                f"👥 *Выбери игрока* (страница 1):",
+                reply_markup=kb_admin_player_list(all_players, f"elo_{action}", 0),
+                parse_mode="Markdown"
+            )
+            return
+
+        if data.startswith("admin_page:"):
+            _, action, page_str = data.split(":")
+            page = int(page_str)
+            all_players = context.user_data.get('admin_player_list', [])
+            if not all_players:
+                await query.answer("❌ Список игроков пуст.", show_alert=True)
+                return
+            
+            await query.message.edit_text(
+                f"👥 *Выбери игрока* (страница {page+1}):",
+                reply_markup=kb_admin_player_list(all_players, action, page),
+                parse_mode="Markdown"
+            )
+            return
+
+        if data.startswith("admin_player:"):
+            _, action, target_uid, page = data.split(":")
+            context.user_data['admin_target'] = target_uid
+            context.user_data['admin_action'] = action
+            context.user_data['admin_page'] = int(page)
+            
+            target_player = players.get(target_uid)
+            if not target_player:
+                await query.answer("❌ Игрок не найден.", show_alert=True)
+                return
+            
+            if action.startswith("elo_"):
+                await safe_delete(query.message)
+                action_type = "выдать" if action == "elo_add" else "убавить"
+                await query.message.reply_text(
+                    f"🎯 *Игрок: @{target_player['tag']}*\n"
+                    f"📊 Текущий ELO: {target_player['elo']}\n\n"
+                    f"Введи сумму ELO для {action_type}:",
+                    parse_mode="Markdown"
+                )
+                context.user_data['admin_input_mode'] = 'elo_amount'
+            return
+
+        if data == "admin_change_id":
+            context.user_data['admin_action'] = 'change_id'
+            all_players = []
+            for uid, p in players.items():
+                if p.get("reg") == 1:
+                    all_players.append({
+                        "user_id": uid,
+                        "tag": p.get("tag", str(uid)),
+                        "elo": p.get("elo", 0)
+                    })
+            all_players.sort(key=lambda x: x['tag'])
+            context.user_data['admin_player_list'] = all_players
+            context.user_data['admin_page'] = 0
+            
+            await safe_delete(query.message)
+            await query.message.reply_text(
+                f"👥 *Выбери игрока для изменения ID* (страница 1):",
+                reply_markup=kb_admin_player_list(all_players, "change_id", 0),
+                parse_mode="Markdown"
+            )
+            return
+
+        if data == "admin_change_nick":
+            context.user_data['admin_action'] = 'change_nick'
+            all_players = []
+            for uid, p in players.items():
+                if p.get("reg") == 1:
+                    all_players.append({
+                        "user_id": uid,
+                        "tag": p.get("tag", str(uid)),
+                        "elo": p.get("elo", 0)
+                    })
+            all_players.sort(key=lambda x: x['tag'])
+            context.user_data['admin_player_list'] = all_players
+            context.user_data['admin_page'] = 0
+            
+            await safe_delete(query.message)
+            await query.message.reply_text(
+                f"👥 *Выбери игрока для изменения ника* (страница 1):",
+                reply_markup=kb_admin_player_list(all_players, "change_nick", 0),
+                parse_mode="Markdown"
+            )
+            return
+
         # ===== ПАТИ =====
         if data == "menu:party":
             await safe_delete(query.message)
@@ -969,7 +1189,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # ===== ПРИГЛАШЕНИЕ В ПАТИ =====
         if data == "party:invite":
             await safe_delete(query.message)
             parties = load_parties()
@@ -986,12 +1205,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             context.user_data['party_invite_mode'] = True
             await query.message.reply_text(
-                "👤 Введите юзернейм игрока, которого хотите пригласить (например: `@vasyapetlin`):",
+                "👤 Введите Telegram юзернейм игрока (например: `@Defnik_5`):",
                 reply_markup=kb_back_main(), parse_mode="Markdown",
             )
             return
 
-        # ===== ВЫХОД ИЗ ПАТИ =====
         if data == "party:leave":
             await safe_delete(query.message)
             parties = load_parties()
@@ -1014,7 +1232,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("🚪 Ты покинул(а) пати.", reply_markup=kb_back_main())
             return
 
-        # ===== ПРИНЯТЬ/ОТКЛОНИТЬ ПРИГЛАШЕНИЕ =====
         if data.startswith("party_accept:") or data.startswith("party_decline:"):
             action, leader_id_str = data.split(":", 1)
             parties = load_parties()
@@ -1039,14 +1256,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            # === party_accept ===
-            # *** ИСПРАВЛЕНИЕ TOCTOU: проверяем, не создал ли игрок себе пати ***
+            # Исправление TOCTOU
             target_leader, target_party = find_party_of(parties, user.id)
             if target_party and int(target_leader) == user.id:
-                # Удаляем его сольную пати
                 del parties[str(user.id)]
                 save_parties(parties)
-                # Перезагружаем данные
                 parties = load_parties()
                 party = parties.get(leader_id_str)
                 if not party:
@@ -1060,7 +1274,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 save_parties(parties)
                 return
 
-            # Удаляем игрока из любых лобби
             lobbies = load_lobbies()
             changed_lobby = False
             for plt in PLATFORMS:
@@ -1150,20 +1363,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     lobbies[platform][idx].append(m)
             save_lobbies(lobbies)
 
-            players_list_txt = []
-            for uid in lobbies[platform][idx]:
-                p = players.get(str(uid), {})
-                tag = p.get("tag", str(uid))
-                elo = p.get("elo", 0)
-                players_list_txt.append(f"@{tag} ({elo} ELO)")
-            text = f"📋 *ЛОББИ {idx + 1}* ({len(lobbies[platform][idx])}/{LOBBY_SIZE})\n\n👥 *ИГРОКИ:*\n"
-            for i, p in enumerate(players_list_txt, 1):
-                text += f"{i}. {p}\n"
-            text += f"\n⏳ Ожидание: {len(lobbies[platform][idx])}/{LOBBY_SIZE}"
-
             await safe_delete(query.message)
-            for m in members_to_add:
-                await safe_send(context.bot, m, text, reply_markup=kb_in_lobby(platform, idx), parse_mode="Markdown")
+            
+            # Обновляем лобби для всех участников
+            await update_lobby_for_all(platform, idx, context)
 
             if len(lobbies[platform][idx]) >= LOBBY_SIZE:
                 await start_ready_check(platform, idx, context)
@@ -1183,6 +1386,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_lobbies(lobbies)
 
             await safe_delete(query.message)
+            
+            # Обновляем лобби для оставшихся участников
+            await update_lobby_for_all(platform, idx, context)
+            
             for m in members_to_remove:
                 await safe_send(context.bot, m, "🚪 Вышел из лобби", reply_markup=kb_platforms())
             return
@@ -1315,7 +1522,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text(f"✅ Матч {record['match_id']} подтверждён и разослан игрокам.")
                 return
             
-            else:  # admin_no
+            else:
                 audit_log("admin_reject_match", user.id, {"match_id": pending_id})
                 
                 for uid, summary in record['player_results'].items():
@@ -1368,12 +1575,69 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = str(user.id)
         text = update.message.text.strip()
         
-        # Ограничение длины сообщения
         if len(text) > 4096:
             await update.message.reply_text("❌ Слишком длинное сообщение (макс 4096 символов)")
             return
         
         players = get_players_cached()
+
+        # ===== АДМИН: ВВОД СУММЫ ELO =====
+        if context.user_data.get('admin_input_mode') == 'elo_amount':
+            try:
+                amount = int(text)
+                if amount <= 0:
+                    await update.message.reply_text("❌ Сумма должна быть положительным числом.")
+                    return
+                
+                action = context.user_data.get('admin_action')
+                target_uid = context.user_data.get('admin_target')
+                
+                if not target_uid:
+                    await update.message.reply_text("❌ Ошибка: цель не найдена.")
+                    return
+                
+                target_player = players.get(target_uid)
+                if not target_player:
+                    await update.message.reply_text("❌ Игрок не найден.")
+                    return
+                
+                if action == 'elo_add':
+                    target_player['elo'] += amount
+                    target_player['level'] = level_from_elo(target_player['elo'])
+                    target_player['rank'] = rank_label(target_player['level'])
+                    audit_log("admin_add_elo", user.id, {
+                        "target": target_uid,
+                        "amount": amount,
+                        "new_elo": target_player['elo']
+                    })
+                    await update.message.reply_text(
+                        f"✅ Выдано {amount} ELO игроку @{target_player['tag']}\n"
+                        f"📊 Новый ELO: {target_player['elo']}"
+                    )
+                else:  # elo_remove
+                    target_player['elo'] = max(0, target_player['elo'] - amount)
+                    target_player['level'] = level_from_elo(target_player['elo'])
+                    target_player['rank'] = rank_label(target_player['level'])
+                    audit_log("admin_remove_elo", user.id, {
+                        "target": target_uid,
+                        "amount": amount,
+                        "new_elo": target_player['elo']
+                    })
+                    await update.message.reply_text(
+                        f"✅ Убавлено {amount} ELO у игрока @{target_player['tag']}\n"
+                        f"📊 Новый ELO: {target_player['elo']}"
+                    )
+                
+                save_players(players)
+                invalidate_cache()
+                context.user_data.pop('admin_input_mode', None)
+                context.user_data.pop('admin_action', None)
+                context.user_data.pop('admin_target', None)
+                return
+                
+            except ValueError:
+                await update.message.reply_text("❌ Введи число (например: 50)")
+                return
 
         # ===== РЕГИСТРАЦИЯ =====
         if context.user_data.get('reg_step'):
@@ -1406,7 +1670,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("❌ Этот ник уже занят!", reply_markup=kb_back_main())
                     return
                 sid = context.user_data['reg_sid']
-                player = new_player(sid)
+                tg_username = user.username or str(user.id)
+                player = new_player(sid, tg_username)
                 player["reg"] = 1
                 player["name"] = text
                 player["tag"] = text
@@ -1422,14 +1687,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-        # ===== ПРИГЛАШЕНИЕ В ПАТИ =====
+        # ===== ПРИГЛАШЕНИЕ В ПАТИ (по Telegram username) =====
         if context.user_data.get('party_invite_mode'):
             context.user_data['party_invite_mode'] = False
-            target_uid = find_by_tag(players, text)
+            target_uid = find_by_telegram_username(players, text)
             inviter = get_player(players, user.id)
             if not target_uid:
                 await update.message.reply_text(
-                    "❌ Игрок с таким юзернеймом не найден среди зарегистрированных в боте.",
+                    "❌ Игрок с таким Telegram юзернеймом не найден среди зарегистрированных в боте.\n"
+                    "Убедись, что он зарегистрирован и введи @username правильно.",
                     reply_markup=kb_back_main(),
                 )
                 return
@@ -1457,8 +1723,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parties[leader_id] = party
             save_parties(parties)
 
+            target_player = players.get(str(target_uid), {})
             await update.message.reply_text(
-                f"✅ Приглашение отправлено игроку @{text}.", reply_markup=kb_back_main(),
+                f"✅ Приглашение отправлено игроку @{target_player.get('tag', target_uid)}!",
+                reply_markup=kb_back_main(),
             )
             sent = await safe_send(
                 context.bot, int(target_uid),
@@ -1753,16 +2021,13 @@ def run_health_server():
 
 # ===== ЗАПУСК =====
 def main():
-    # Создаем папки
     os.makedirs("backups", exist_ok=True)
     os.makedirs("logs", exist_ok=True)
     
-    # Запускаем health check в отдельном потоке
     health_thread = threading.Thread(target=run_health_server, daemon=True)
     health_thread.start()
     logger.info("Health check сервер запущен на порту 8080")
     
-    # Настройка бота
     request = HTTPXRequest(
         connect_timeout=CONNECT_TIMEOUT,
         read_timeout=READ_TIMEOUT,
@@ -1772,14 +2037,13 @@ def main():
     
     app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
     
-    # Обработчики команд
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("winner", winner_command))
+    app.add_handler(CommandHandler("admin", admin_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Глобальный обработчик ошибок
     async def error_handler(update, context):
         logger.error(f"Update {update} вызвал ошибку: {context.error}", exc_info=True)
     app.add_error_handler(error_handler)
@@ -1787,12 +2051,12 @@ def main():
     logger.info("="*50)
     logger.info("🤖 Stranger Faceit запущен!")
     logger.info(f"👑 Админы: {ADMIN_IDS}")
+    logger.info(f"👑 Владелец: {OWNER_ID}")
     logger.info(f"🏠 Общий чат: {GENERAL_CHAT_ID}")
     logger.info(f"🔒 Админ-чат: {ADMIN_CHAT_ID}")
     logger.info(f"📁 Данные: {DATA_FILE}, {PENDING_FILE}, {LOBBIES_FILE}, {PARTIES_FILE}")
     logger.info("="*50)
     
-    # Запуск бота
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
