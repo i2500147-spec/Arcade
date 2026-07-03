@@ -505,16 +505,20 @@ async def button_callback(update, context):
                 reports=await load_reports(); categories={"читер":0,"оскорбления":0,"слив":0,"афк":0,"токсик":0,"другое":0}; keywords={"читер":["чит","aim","wallhack","аим","вх"],"оскорбления":["оскорб","мат","хам"],"слив":["слил","слив","throw"],"афк":["афк","afk","не играл"],"токсик":["токсич","токсик"]}
                 for lst in reports.values():
                     for r in lst:
-                        t=r.get("text","").lower(); matched=False
-                        for cat,kws in keywords.items():
-                            if any(k in t for k in kws): categories[cat]+=1; matched=True; break
-                        if not matched: categories["другое"]+=1
-                text=f"📊 АНАЛИТИКА\n\n🗺️ Карта: {MAP_EMOJI.get(top_map,'')} {top_map}\n👥 Средний онлайн: {avg_online}\n📈 Средний ELO: {avg_elo}\n⏰ Пиковое время: {f'{peak_hour}:00 - {(peak_hour+1)%24}:00 (МСК)' if peak_hour else 'нет данных'}\n🎮 Активных матчей: {sum(1 for v in pending.values() if v.get('status')=='awaiting_review')}\n\n📢 Топ жалоб:\n" + "\n".join(f"  • {c}: {n}" for c,n in sorted(categories.items(), key=lambda x:x[1], reverse=True) if n>0)
-                await q.message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin:back")]])); return
-            if action=="complaints_top":
-                await safe_delete(q.message); reports=await load_reports()
-                counts=sorted(((await load_players()).get(uid,{}).get('tag',uid), len(lst)) for uid,lst in reports.items() if lst, key=lambda x:x[1], reverse=True)[:10]
-                await q.message.reply_text("📢 ТОП ЖАЛОБ ПО ИГРОКАМ\n\n" + ("\n".join(f"@{t} — {n}" for t,n in counts) if counts else "Нет жалоб."), reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin:back")]])); return
+                        t=r.get("text","").lower(); matched=Falseif action=="complaints_top":
+    await safe_delete(q.message)
+    reports=await load_reports()
+    players_data = await load_players()
+    counts = []
+    for uid, lst in reports.items():
+        if lst and len(lst) > 0:
+            tag = players_data.get(uid, {}).get('tag', uid)
+            counts.append((tag, len(lst)))
+    counts.sort(key=lambda x: x[1], reverse=True)
+    counts = counts[:10]
+    text = "📢 ТОП ЖАЛОБ ПО ИГРОКАМ\n\n" + ("\n".join(f"@{t} — {n}" for t,n in counts) if counts else "Нет жалоб.")
+    await q.message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin:back")]]))
+    return
             if action=="history":
                 history=await load_history(); text,total=admin_history_page_text(history,0)
                 await safe_delete(q.message); await q.message.reply_text(text, reply_markup=kb_history_nav(0,total)); return
