@@ -805,5 +805,51 @@ def main():
     logger.info("🤖 Strange Faceit запущен!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
+def ensure_event_loop():
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
+def main():
+    ensure_event_loop()
+    if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN is not set")
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise RuntimeError("SUPABASE_URL / SUPABASE_KEY are not set")
+
+    threading.Thread(target=run_flask, daemon=True).start()
+
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", cmd_start))
+
+    app.add_handler(CallbackQueryHandler(cb_check_sub, pattern="^check_sub$"))
+    app.add_handler(CallbackQueryHandler(cb_back_to_menu, pattern="^back_to_menu$"))
+    app.add_handler(CallbackQueryHandler(cb_support, pattern="^support$"))
+
+    app.add_handler(CallbackQueryHandler(cb_register_start, pattern="^register_start$"))
+    app.add_handler(CallbackQueryHandler(cb_login_start, pattern="^login_start$"))
+    app.add_handler(CallbackQueryHandler(cb_approve_registration, pattern="^approve_\\d+$"))
+    app.add_handler(CallbackQueryHandler(cb_reject_registration, pattern="^reject_\\d+$"))
+
+    app.add_handler(CallbackQueryHandler(cb_profile, pattern="^profile$"))
+    app.add_handler(CallbackQueryHandler(cb_leaderboard, pattern="^leaderboard$"))
+    app.add_handler(CallbackQueryHandler(cb_stats, pattern="^stats$"))
+    app.add_handler(CallbackQueryHandler(cb_history, pattern="^history$"))
+    app.add_handler(CallbackQueryHandler(cb_find_match, pattern="^find_match$"))
+    app.add_handler(CallbackQueryHandler(cb_party_menu, pattern="^party_menu$"))
+    app.add_handler(CallbackQueryHandler(cb_reports_menu, pattern="^reports_menu$"))
+    app.add_handler(CallbackQueryHandler(cb_premium_menu, pattern="^premium_menu$"))
+    app.add_handler(CallbackQueryHandler(cb_platform, pattern="^platform_"))
+
+    app.add_handler(MessageHandler(filters.PHOTO, handle_register_photo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+
+    logger.info("🤖 Strange Faceit запущен!")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
 if __name__ == "__main__":
     main()
