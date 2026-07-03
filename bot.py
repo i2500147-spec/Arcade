@@ -266,10 +266,10 @@ async def winner_command(update, context):
     args=context.args
     if not args or args[0].lower() not in ("ct","t"): return await update.message.reply_text("Использование: /winner ct  или  /winner t")
     if not context.user_data.get('match_photo'): return await update.message.reply_text("📸 Сначала отправь скриншот результата.")
-    match['winner_side'], match['status'] = args[0].lower(), 'awaiting_winning_team'
+    match['winner_side'] = args[0].lower()
+    match['status'] = 'awaiting_winning_team'
     context.user_data['match']=match
     await update.message.reply_text(f"✅ Победила сторона: {args[0].upper()}\n\nКакая команда играла за {args[0].upper()} и победила?", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔵 Команда А", callback_data="winteam:a"), InlineKeyboardButton("🔴 Команда Б", callback_data="winteam:b")]]))
-
 async def button_callback(update, context):
     try:
         q=update.callback_query; await q.answer(); user, data = q.from_user, q.data
@@ -666,9 +666,11 @@ async def successful_payment(update, context):
     if not payload.startswith("premium_"): return
     period=payload.split("_")[1]
     if period not in PREMIUM_DURATIONS: return
-    p=get_player(await load_players(), update.effective_user.id)
+    players = await load_players()
+    p = get_player(players, update.effective_user.id)
     if p:
-        p['premium_until']=int(time.time())+PREMIUM_DURATIONS[period]; await save_players(await load_players())
+        p['premium_until'] = int(time.time()) + PREMIUM_DURATIONS[period]
+        await save_players(players)
         await update.message.reply_text(f"✅ Премиум-подписка активирована!\n\n📅 Период: {'день' if period=='day' else 'неделя' if period=='week' else 'месяц'}\n💎 Теперь тебе доступны:\n• x2 ELO\n• Любой тег\n• Бесплатные турниры\n• Смена ника (2 раза бесплатно, далее 50⭐)")
     else: await update.message.reply_text("❌ Ошибка: игрок не найден.")
 async def _notify_result_ready(host_id, match_id, context):
