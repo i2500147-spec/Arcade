@@ -27,12 +27,12 @@ from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
     MessageHandler, ContextTypes, filters,
+    PreCheckoutQueryHandler,
 )
 from telegram.request import HTTPXRequest
 from dotenv import load_dotenv
 
 load_dotenv()
-
 # ===================== ЛОГИРОВАНИЕ =====================
 os.makedirs("logs", exist_ok=True)
 
