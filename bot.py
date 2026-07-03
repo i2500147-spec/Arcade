@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Stranger Faceit — Telegram бот для матчмейкинга в Standoff 2.
-Версия: 2.1 (с админ-панелью, обновлением лобби и приглашением по Telegram)
+Версия: 2.2 (оптимизирована для Render)
 """
 
 import asyncio
@@ -20,8 +20,8 @@ from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
 from logging.handlers import RotatingFileHandler
+
 from flask import Flask, jsonify
-# from PIL import Image, ImageDraw, ImageFont  # Временно отключено для Render
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import (
@@ -31,6 +31,7 @@ from telegram.ext import (
 from telegram.request import HTTPXRequest
 from dotenv import load_dotenv
 
+# Загрузка переменных окружения
 load_dotenv()
 
 # ===== НАСТРОЙКА ЛОГИРОВАНИЯ =====
@@ -55,7 +56,9 @@ logger.addHandler(file_handler)
 REQUIRED_ENV = ["BOT_TOKEN", "ADMIN_IDS", "GENERAL_CHAT_ID", "ADMIN_CHAT_ID"]
 missing_vars = [var for var in REQUIRED_ENV if not os.environ.get(var)]
 if missing_vars:
-    raise ValueError(f"❌ Отсутствуют обязательные переменные: {', '.join(missing_vars)}")
+    logger.error(f"❌ Отсутствуют переменные: {', '.join(missing_vars)}")
+    logger.error("Добавьте их в Environment Variables на Render")
+    sys.exit(1)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip()]
@@ -65,6 +68,8 @@ CHAT_LINK = os.environ.get("CHAT_LINK", "")
 REQUIRE_SUBSCRIPTION = int(os.environ.get("REQUIRE_SUBSCRIPTION", "1"))
 SUBSCRIPTION_CHAT_ID = int(os.environ.get("SUBSCRIPTION_CHAT_ID", str(GENERAL_CHAT_ID)))
 OWNER_ID = int(os.environ.get("OWNER_ID", ADMIN_IDS[0] if ADMIN_IDS else 0))
+
+logger.info("✅ Все переменные окружения загружены")
 
 # ===== КОНСТАНТЫ =====
 DATA_FILE = "players.json"
@@ -129,11 +134,6 @@ def _load_json(path, default):
                 return json.load(f)
         except (json.JSONDecodeError, IOError) as e:
             logger.error(f"Ошибка чтения {path}: {e}")
-            backup_path = f"backups/{os.path.basename(path).replace('.json', '')}_latest.json"
-            if os.path.exists(backup_path):
-                logger.info(f"Восстанавливаем из бэкапа {backup_path}")
-                with open(backup_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
             return default
 
 def _save_json(path, data):
@@ -143,12 +143,10 @@ def _save_json(path, data):
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             os.replace(tmp_path, path)
-            backup_data()
         except Exception as e:
             logger.error(f"Ошибка сохранения {path}: {e}")
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
-            raise
 
 def load_players():
     return _load_json(DATA_FILE, {})
@@ -193,24 +191,6 @@ def get_players_cached():
 def invalidate_cache():
     PLAYER_CACHE["data"] = None
     PLAYER_CACHE["timestamp"] = 0
-
-def backup_data():
-    backup_dir = "backups"
-    os.makedirs(backup_dir, exist_ok=True)
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    files = [DATA_FILE, PENDING_FILE, LOBBIES_FILE, PARTIES_FILE]
-    
-    for file in files:
-        if os.path.exists(file):
-            name = os.path.basename(file).replace('.json', '')
-            backup_name = f"{backup_dir}/{name}_{timestamp}.json"
-            shutil.copy2(file, backup_name)
-    
-    backups = sorted([f for f in os.listdir(backup_dir) if f.endswith('.json')])
-    if len(backups) > 5:
-        for old_file in backups[:-5]:
-            os.remove(os.path.join(backup_dir, old_file))
 
 def find_party_of(parties, user_id):
     uid = int(user_id)
@@ -283,7 +263,6 @@ def find_by_tag(players, tag):
     return None
 
 def find_by_telegram_username(players, username):
-    """Поиск игрока по Telegram username"""
     username_clean = username.lstrip("@").lower()
     for uid, p in players.items():
         if p.get("tg_username", "").lower() == username_clean:
@@ -401,84 +380,6 @@ def veto_ban(veto, captain_id, map_name):
         veto["turn"] = veto["captain_b"] if veto["turn"] == veto["captain_a"] else veto["captain_a"]
     return True, None
 
-# ===== КАРТОЧКА МАТЧА =====
-CARD_W, CARD_H = 900, 620
-CARD_BG = (18, 20, 28)
-CARD_PANEL = (28, 31, 42)
-WIN_COLOR = (76, 175, 128)
-LOSE_COLOR = (214, 79, 79)
-TEXT_MAIN = (235, 236, 240)
-TEXT_DIM = (150, 154, 165)
-GOLD = (240, 190, 80)
-_FONT_CACHE = {}
-
-def _font(size, bold=False):
-    cache_key = (size, bold)
-    if cache_key in _FONT_CACHE:
-        return _FONT_CACHE[cache_key]
-    candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/system/fonts/Roboto-Bold.ttf" if bold else "/system/fonts/Roboto-Regular.ttf",
-        "/system/fonts/NotoSans-Bold.ttf" if bold else "/system/fonts/NotoSans-Regular.ttf",
-        os.path.expanduser("~/fonts/DejaVuSans-Bold.ttf") if bold else os.path.expanduser("~/fonts/DejaVuSans.ttf"),
-    ]
-    for path in candidates:
-        if path and os.path.exists(path):
-            try:
-                font = ImageFont.truetype(path, size)
-                _FONT_CACHE[cache_key] = font
-                return font
-            except OSError:
-                continue
-    font = ImageFont.load_default()
-    _FONT_CACHE[cache_key] = font
-    return font
-
-def render_match_card(match_report):
-    img = Image.new("RGB", (CARD_W, CARD_H), CARD_BG)
-    draw = ImageDraw.Draw(img)
-    title_font = _font(30, bold=True)
-    sub_font = _font(18)
-    map_emoji = MAP_EMOJI.get(match_report["map_name"], "🗺️")
-    header = f"{map_emoji}  {match_report['map_name']}"
-    draw.text((CARD_W // 2, 30), header, font=title_font, fill=GOLD, anchor="ma")
-    draw.text((CARD_W // 2, 72), match_report["match_id"], font=sub_font, fill=TEXT_DIM, anchor="ma")
-    col_w = 380
-    left_x = 40
-    right_x = CARD_W - 40 - col_w
-    top_y = 190
-    draw.text((left_x, top_y - 34), "🔵 ПОБЕДА", font=_font(22, bold=True), fill=WIN_COLOR)
-    draw.text((right_x, top_y - 34), "🔴 ПОРАЖЕНИЕ", font=_font(22, bold=True), fill=LOSE_COLOR)
-    y = top_y
-    for pl in match_report["winners"]:
-        mvp_star = " ⭐" if pl.get("mvp") else ""
-        name = f"@{pl['tag']}{mvp_star}"
-        sub = f"{pl['kd']} • Калибровка" if pl.get("calibrating") else f"{pl['kd']} • {pl['delta']:+d} ELO → {pl['elo']}"
-        row_h = 64
-        draw.rounded_rectangle([left_x, y, left_x + col_w, y + row_h], radius=10, fill=CARD_PANEL)
-        draw.rectangle([left_x, y, left_x + 5, y + row_h], fill=WIN_COLOR)
-        draw.text((left_x + 20, y + 10), name, font=_font(22, bold=True), fill=TEXT_MAIN)
-        draw.text((left_x + 20, y + 36), sub, font=_font(16), fill=TEXT_DIM)
-        y += row_h + 10
-    y = top_y
-    for pl in match_report["losers"]:
-        name = f"@{pl['tag']}"
-        sub = f"{pl['kd']} • Калибровка" if pl.get("calibrating") else f"{pl['kd']} • {pl['delta']:+d} ELO → {pl['elo']}"
-        row_h = 64
-        draw.rounded_rectangle([right_x, y, right_x + col_w, y + row_h], radius=10, fill=CARD_PANEL)
-        draw.rectangle([right_x, y, right_x + 5, y + row_h], fill=LOSE_COLOR)
-        draw.text((right_x + 20, y + 10), name, font=_font(22, bold=True), fill=TEXT_MAIN)
-        draw.text((right_x + 20, y + 36), sub, font=_font(16), fill=TEXT_DIM)
-        y += row_h + 10
-    footer_y = CARD_H - 50
-    footer = f"✅ Проверил: @{match_report['confirmed_by']}" if match_report.get("confirmed_by") else "Stranger Faceit"
-    draw.text((CARD_W // 2, footer_y), footer, font=_font(18), fill=TEXT_DIM, anchor="ma")
-    buf = BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    buf.name = "match_card.png"
-    return buf
-
 # ===== КЛАВИАТУРЫ =====
 def kb_register():
     return InlineKeyboardMarkup([[InlineKeyboardButton("📝 Регистрация", callback_data="reg:start")]])
@@ -511,11 +412,10 @@ def kb_platforms():
     ])
 
 def kb_lobbies(platform, lobbies, min_free_slots=1):
-    """Лобби в 2 колонки: 1-4, 2-5, 3-6"""
     rows = []
-    for i in range(3):  # 3 ряда
+    for i in range(3):
         row = []
-        for j in [i, i + 3]:  # Лобби 1 и 4, 2 и 5, 3 и 6
+        for j in [i, i + 3]:
             if j < LOBBIES_PER_PLATFORM:
                 count = len(lobbies[platform][j])
                 free = LOBBY_SIZE - count
@@ -588,7 +488,6 @@ def kb_admin_elo_action():
     ])
 
 def kb_admin_player_list(players, action, page=0):
-    """Список игроков для админ-действий (постранично, по 10)"""
     items_per_page = 10
     total_pages = (len(players) + items_per_page - 1) // items_per_page
     
@@ -610,7 +509,6 @@ def kb_admin_player_list(players, action, page=0):
             )
         ])
     
-    # Навигация
     nav_row = []
     if page > 0:
         nav_row.append(InlineKeyboardButton("⬅️", callback_data=f"admin_page:{action}:{page-1}"))
@@ -672,7 +570,6 @@ async def require_subscription(update: Update, context: ContextTypes.DEFAULT_TYP
     return True
 
 async def update_lobby_for_all(platform: str, lobby_idx: int, context: ContextTypes.DEFAULT_TYPE):
-    """Обновление лобби для всех участников"""
     lobbies = load_lobbies()
     players_list = lobbies[platform][lobby_idx]
     players = get_players_cached()
@@ -847,7 +744,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ===== КОМАНДА /ADMIN =====
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Админ-панель"""
     if update.effective_user.id != OWNER_ID:
         await update.message.reply_text("❌ Доступ запрещен. Только для владельца.")
         return
@@ -1059,7 +955,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action = "add" if data == "admin_elo_add" else "remove"
             context.user_data['admin_action'] = f"elo_{action}"
             
-            # Список игроков
             all_players = []
             for uid, p in players.items():
                 if p.get("reg") == 1:
@@ -1255,7 +1150,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-            # Исправление TOCTOU
             target_leader, target_party = find_party_of(parties, user.id)
             if target_party and int(target_leader) == user.id:
                 del parties[str(user.id)]
@@ -1363,8 +1257,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_lobbies(lobbies)
 
             await safe_delete(query.message)
-            
-            # Обновляем лобби для всех участников
             await update_lobby_for_all(platform, idx, context)
 
             if len(lobbies[platform][idx]) >= LOBBY_SIZE:
@@ -1385,8 +1277,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_lobbies(lobbies)
 
             await safe_delete(query.message)
-            
-            # Обновляем лобби для оставшихся участников
             await update_lobby_for_all(platform, idx, context)
             
             for m in members_to_remove:
@@ -1613,7 +1503,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"✅ Выдано {amount} ELO игроку @{target_player['tag']}\n"
                         f"📊 Новый ELO: {target_player['elo']}"
                     )
-                else:  # elo_remove
+                else:
                     target_player['elo'] = max(0, target_player['elo'] - amount)
                     target_player['level'] = level_from_elo(target_player['elo'])
                     target_player['rank'] = rank_label(target_player['level'])
@@ -1686,7 +1576,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-        # ===== ПРИГЛАШЕНИЕ В ПАТИ (по Telegram username) =====
+        # ===== ПРИГЛАШЕНИЕ В ПАТИ =====
         if context.user_data.get('party_invite_mode'):
             context.user_data['party_invite_mode'] = False
             target_uid = find_by_telegram_username(players, text)
@@ -1862,18 +1752,24 @@ async def finalize_match(update: Update, context: ContextTypes.DEFAULT_TYPE, ski
     }
     save_pending(pending)
 
-    card_report = {
-        "match_id": match_id, "map_name": map_name, "score": None,
-        "winners": winners_card, "losers": losers_card, "confirmed_by": None,
-    }
-    card_image = render_match_card(card_report)
+    # Отправка админам (текстовое сообщение вместо картинки)
     target_chat = ADMIN_CHAT_ID or (ADMIN_IDS[0] if ADMIN_IDS else None)
     if target_chat:
         if match_photo:
             await safe_send(context.bot, target_chat, f"📸 Скриншот результата матча {match_id}", photo=match_photo)
+        
+        winners_text = "\n".join([f"🏆 {p['tag']} ({p['kd']})" for p in winners_card])
+        losers_text = "\n".join([f"❌ {p['tag']} ({p['kd']})" for p in losers_card])
+        
         await safe_send(
-            context.bot, target_chat, f"📋 *Матч на проверку*\n🆔 {match_id}",
-            photo=card_image, parse_mode="Markdown", reply_markup=kb_admin_review(pending_id),
+            context.bot, target_chat,
+            f"📋 *Матч на проверку*\n"
+            f"🆔 *{match_id}*\n"
+            f"📍 Карта: *{map_name}*\n\n"
+            f"*🔵 ПОБЕДА:*\n{winners_text}\n\n"
+            f"*🔴 ПОРАЖЕНИЕ:*\n{losers_text}",
+            parse_mode="Markdown",
+            reply_markup=kb_admin_review(pending_id)
         )
 
     context.user_data['stats_mode'] = False
