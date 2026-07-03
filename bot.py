@@ -1915,6 +1915,60 @@ def run_health_server():
         logger.error(f"Health check сервер не запущен: {e}")
 
 # ===== ЗАПУСК =====
+def _ensure_event_loop():
+    """Создает event loop если его нет (для Python 3.14+)"""
+    import asyncio
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+def main():
+    _ensure_event_loop()  # ВАЖНО! Добавить эту строку
+    
+    os.makedirs("backups", exist_ok=True)
+    os.makedirs("logs", exist_ok=True)
+    
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    logger.info("Health check сервер запущен на порту 8080")
+    
+    request = HTTPXRequest(
+        connect_timeout=CONNECT_TIMEOUT,
+        read_timeout=READ_TIMEOUT,
+        write_timeout=WRITE_TIMEOUT,
+        pool_timeout=POOL_TIMEOUT,
+    )
+    
+    app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("winner", winner_command))
+    app.add_handler(CommandHandler("admin", admin_command))
+    app.add_handler(CallbackQueryHandler(button_callback))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    async def error_handler(update, context):
+        logger.error(f"Update {update} вызвал ошибку: {context.error}", exc_info=True)
+    app.add_error_handler(error_handler)
+    
+    logger.info("="*50)
+    logger.info("🤖 Stranger Faceit запущен!")
+    logger.info(f"👑 Админы: {ADMIN_IDS}")
+    logger.info(f"👑 Владелец: {OWNER_ID}")
+    logger.info(f"🏠 Общий чат: {GENERAL_CHAT_ID}")
+    logger.info(f"🔒 Админ-чат: {ADMIN_CHAT_ID}")
+    logger.info(f"📁 Данные: {DATA_FILE}, {PENDING_FILE}, {LOBBIES_FILE}, {PARTIES_FILE}")
+    logger.info("="*50)
+    
+    app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
+
+
 def main():
     os.makedirs("backups", exist_ok=True)
     os.makedirs("logs", exist_ok=True)
