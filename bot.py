@@ -2008,7 +2008,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ Ник не совпадает с сохранённым. Попробуй снова.", reply_markup=kb_back_main())
                 return
             if owner_uid != user_id:
-                fresh_players[user_id] = owner_p
+                fresh_players[str(user.id)] = new_p
                 del fresh_players[owner_uid]
                 fresh_players[user_id]['tg_username'] = user.username or str(user.id)
                 save_players(fresh_players)
