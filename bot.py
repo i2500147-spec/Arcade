@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import os
+"""
+Stranger Faceit — Telegram бот для матчмейкинга в Standoff 2.
+Для запуска на Render.com
+"""
+
 import json
 import logging
+import os
 import random
+import re
 import string
 import threading
 from datetime import datetime
 from io import BytesIO
 from typing import Optional
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
@@ -18,20 +25,14 @@ from PIL import Image, ImageDraw, ImageFont
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger("stranger_faceit")
 
-# ===== КОНФИГ (из переменных окружения Render) =====
-BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("TELEGRAM_TOKEN не задан!")
-
-ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
-GENERAL_CHAT_ID = int(os.environ.get("GENERAL_CHAT_ID", "0") or "0")
-ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "0") or "0")
-CHAT_LINK = os.environ.get("CHAT_LINK", "")
-REQUIRE_SUBSCRIPTION = os.environ.get("REQUIRE_SUBSCRIPTION", "0") == "1"
-SUBSCRIPTION_CHAT_ID = int(os.environ.get("SUBSCRIPTION_CHAT_ID", "0") or "0")
-
-if not ADMIN_IDS:
-    raise RuntimeError("ADMIN_IDS не задан!")
+# ===== КОНФИГ (ТОКЕН ВСТАВЛЕН ПРЯМО В КОД) =====
+BOT_TOKEN = "8280414108:AAElQw84k1zfKcggM1c6OQ1PjFdmWWfR2LI"
+ADMIN_IDS = [8131755675]
+GENERAL_CHAT_ID = -1004404404847
+ADMIN_CHAT_ID = -1004398372551
+CHAT_LINK = "https://t.me/+Gt7b_p6ywxc3Yjli"
+REQUIRE_SUBSCRIPTION = 1
+SUBSCRIPTION_CHAT_ID = -1004404404847
 
 DATA_FILE = "players.json"
 PENDING_FILE = "pending.json"
@@ -313,7 +314,7 @@ def profile_text(player):
             text += f"{MAP_EMOJI.get(map_name, '')} {map_name}: {stats['wins']}-{stats['losses']} ({rate}%)\n"
     return text
 
-# ===== /start =====
+# ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     players = load_players()
@@ -326,7 +327,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text(main_menu_text(player), reply_markup=kb_main_menu(), parse_mode="Markdown")
 
-# ===== handle_photo =====
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     match = context.user_data.get('match')
     if not match or match.get('status') != 'in_progress':
@@ -338,7 +338,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['match_photo'] = file_id
     await update.message.reply_text("✅ Скриншот результата принят!\n\nТеперь объяви победившую сторону:\n`/winner ct` или `/winner t`", parse_mode="Markdown")
 
-# ===== winner_command =====
 async def winner_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     match = context.user_data.get('match')
     if not match or match.get('status') != 'in_progress':
@@ -358,7 +357,6 @@ async def winner_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔵 Команда А", callback_data="winteam:a")], [InlineKeyboardButton("🔴 Команда Б", callback_data="winteam:b")]])
     await update.message.reply_text(f"✅ Победила сторона: *{side.upper()}*\n\nКакая команда играла за {side.upper()} и победила?", reply_markup=kb, parse_mode="Markdown")
 
-# ===== button_callback =====
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -577,8 +575,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(f"❌ Матч {record['match_id']} отклонён, изменения откачены.")
             return
 
-# ===== handle_message =====
-import re
+# ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
 STATS_LINE_RE = re.compile(r"^@?([A-Za-z0-9_]+)\s+(\d+)\s*-\s*(\d+)$")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -657,7 +654,7 @@ async def handle_stats_input(update: Update, context: ContextTypes.DEFAULT_TYPE,
         return
     await finalize_match(update, context, skip_stats=False)
 
-# ===== finalize_match =====
+# ===== ЗАВЕРШЕНИЕ МАТЧА =====
 async def finalize_match(update: Update, context: ContextTypes.DEFAULT_TYPE, skip_stats: bool):
     match = context.user_data.get('match')
     if not match: return
@@ -715,7 +712,7 @@ async def finalize_match(update: Update, context: ContextTypes.DEFAULT_TYPE, ski
     context.user_data['match_photo'] = None
     await update.effective_message.reply_text("✅ Результат отправлен администраторам на проверку.\nКак только матч будет подтверждён, ты получишь уведомление в ЛС.")
 
-# ===== start_match =====
+# ===== ЗАПУСК МАТЧА =====
 async def start_match(platform: str, lobby_idx: int, context: ContextTypes.DEFAULT_TYPE):
     lobbies = load_lobbies()
     players_list = lobbies[platform][lobby_idx].copy()
@@ -741,7 +738,7 @@ async def start_match(platform: str, lobby_idx: int, context: ContextTypes.DEFAU
     available = veto["pool"]
     await safe_send(context.bot, captain_a, f"🗺️ *ВЕТО*\n\nХод: @{tag}\nДоступные карты:\n" + "\n".join([f"• {MAP_EMOJI.get(m, '')} {m}" for m in available]), parse_mode="Markdown", reply_markup=kb_veto(available))
 
-# ===== main =====
+# ===== ЗАПУСК =====
 def main():
     request = HTTPXRequest(connect_timeout=CONNECT_TIMEOUT, read_timeout=READ_TIMEOUT, write_timeout=WRITE_TIMEOUT, pool_timeout=POOL_TIMEOUT)
     app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
