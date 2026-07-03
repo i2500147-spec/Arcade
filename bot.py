@@ -497,17 +497,50 @@ async def button_callback(update, context):
             if action=="analytics":
                 await safe_delete(q.message)
                 a,pending=await load_analytics(),await load_pending()
-                map_picks=a.get("map_picks",{}); top_map=max(map_picks.items(), key=lambda x:x[1])[0] if map_picks else "нет данных"
-                online_samples=a.get("online_samples",[]); avg_online=round(sum(online_samples)/len(online_samples),1) if online_samples else 0
-                elos=[p.get("elo",0) for p in (await load_players()).values() if p.get("reg")==1 and p.get("calib",0)>=CALIBRATION_GAMES]
-                avg_elo=round(sum(elos)/len(elos),1) if elos else 0
-                hours=[]; [hours.append(datetime.fromisoformat(ts).hour) for ts in a.get("match_timestamps",[]) if ts]; peak_hour=Counter(hours).most_common(1)[0][0] if hours else None
-                reports=await load_reports(); categories={"читер":0,"оскорбления":0,"слив":0,"афк":0,"токсик":0,"другое":0}; keywords={"читер":["чит","aim","wallhack","аим","вх"],"оскорбления":["оскорб","мат","хам"],"слив":["слил","слив","throw"],"афк":["афк","afk","не играл"],"токсик":["токсич","токсик"]}
-                for lst in reports.values():
-                    for r in lst:
-                        t=r.get("text","").lower(); matched=Falseif action=="complaints_top":
+                if action == "analytics":
     await safe_delete(q.message)
-    reports=await load_reports()
+    a, pending = await load_analytics(), await load_pending()
+    map_picks = a.get("map_picks", {})
+    top_map = max(map_picks.items(), key=lambda x: x[1])[0] if map_picks else "нет данных"
+    online_samples = a.get("online_samples", [])
+    avg_online = round(sum(online_samples) / len(online_samples), 1) if online_samples else 0
+    elos = [p.get("elo", 0) for p in (await load_players()).values() if p.get("reg") == 1 and p.get("calib", 0) >= CALIBRATION_GAMES]
+    avg_elo = round(sum(elos) / len(elos), 1) if elos else 0
+    hours = []
+    for ts in a.get("match_timestamps", []):
+        if ts:
+            try:
+                hours.append(datetime.fromisoformat(ts).hour)
+            except:
+                pass
+    peak_hour = Counter(hours).most_common(1)[0][0] if hours else None
+    reports = await load_reports()
+    categories = {"читер": 0, "оскорбления": 0, "слив": 0, "афк": 0, "токсик": 0, "другое": 0}
+    keywords = {
+        "читер": ["чит", "aim", "wallhack", "аим", "вх"],
+        "оскорбления": ["оскорб", "мат", "хам"],
+        "слив": ["слил", "слив", "throw"],
+        "афк": ["афк", "afk", "не играл"],
+        "токсик": ["токсич", "токсик"]
+    }
+    for lst in reports.values():
+        for r in lst:
+            t = r.get("text", "").lower()
+            matched = False
+            for cat, kws in keywords.items():
+                if any(k in t for k in kws):
+                    categories[cat] += 1
+                    matched = True
+                    break
+            if not matched:
+                categories["другое"] += 1
+    text = f"📊 АНАЛИТИКА\n\n🗺️ Карта: {MAP_EMOJI.get(top_map, '')} {top_map}\n👥 Средний онлайн: {avg_online}\n📈 Средний ELO: {avg_elo}\n⏰ Пиковое время: {f'{peak_hour}:00 - {(peak_hour + 1) % 24}:00 (МСК)' if peak_hour else 'нет данных'}\n🎮 Активных матчей: {sum(1 for v in pending.values() if v.get('status') == 'awaiting_review')}\n\n📢 Топ жалоб:\n" + "\n".join(f"  • {c}: {n}" for c, n in sorted(categories.items(), key=lambda x: x[1], reverse=True) if n > 0)
+    await q.message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin:back")]]))
+    return
+
+if action == "complaints_top":
+    await safe_delete(q.message)
+    reports = await load_reports()
     players_data = await load_players()
     counts = []
     for uid, lst in reports.items():
@@ -516,7 +549,7 @@ async def button_callback(update, context):
             counts.append((tag, len(lst)))
     counts.sort(key=lambda x: x[1], reverse=True)
     counts = counts[:10]
-    text = "📢 ТОП ЖАЛОБ ПО ИГРОКАМ\n\n" + ("\n".join(f"@{t} — {n}" for t,n in counts) if counts else "Нет жалоб.")
+    text = "📢 ТОП ЖАЛОБ ПО ИГРОКАМ\n\n" + ("\n".join(f"@{t} — {n}" for t, n in counts) if counts else "Нет жалоб.")
     await q.message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin:back")]]))
     return
             if action=="history":
