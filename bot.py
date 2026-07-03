@@ -1394,7 +1394,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 is_leader_uid = (uid == leader_uid)
                 await safe_send(
                     context.bot, uid, text, reply_markup=kb_party_menu(is_leader_uid, len(party["members"])),
-                    parse_mode="Markdown",
+                    parse_mode="MarkdownV2",
                 )
             return
 
@@ -1404,7 +1404,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not player or player.get("reg") != 1:
                 await query.message.reply_text("Сначала зарегистрируйся!", reply_markup=kb_start_auth())
                 return
-            await query.message.reply_text("📱 *ВЫБЕРИ ПЛАТФОРМУ*", reply_markup=kb_platforms(), parse_mode="Markdown")
+            await query.message.reply_text("📱 *ВЫБЕРИ ПЛАТФОРМУ*", reply_markup=kb_platforms(), parse_mode="MarkdownV2")
             return
 
         if data.startswith("platform:"):
@@ -1426,7 +1426,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(
                 f"📱 *{platform.upper()} ЛОББИ*" + (f"\n(нужно {min_free} свободных мест для пати)" if party else ""),
                 reply_markup=kb_lobbies(platform, lobbies, min_free_slots=min_free),
-                parse_mode="Markdown",
+                parse_mode="MarkdownV2",
             )
             return
 
