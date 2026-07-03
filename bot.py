@@ -27,7 +27,7 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger("stranger_faceit")
 
 # ===== КОНФИГ =====
-BOT_TOKEN = "8280414108:AAElQw84k1zfKcggM1c6OQ1PjFdmWWfR2LI"
+BOT_TOKEN = "8280414108:AAGkt0FPZY7PwADKXMhJlLBuZHaJXkNUh6U"
 ADMIN_IDS = [8131755675]
 GENERAL_CHAT_ID = -1004404404847
 ADMIN_CHAT_ID = -1004398372551
