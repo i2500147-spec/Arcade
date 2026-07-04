@@ -157,6 +157,18 @@ def subscription_prompt_kb():
     return InlineKeyboardMarkup(buttons)
 
 # ============================================================
+# CALLBACK: CHECK SUBSCRIPTION
+# ============================================================
+
+async def cb_check_sub(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    if await check_subscription(context, q.from_user.id):
+        await q.edit_message_text("Спасибо за подписку!", reply_markup=entry_kb())
+    else:
+        await q.answer("Вы ещё не подписались 🙁", show_alert=True)
+
+# ============================================================
 # STATE
 # ============================================================
 
@@ -209,6 +221,14 @@ def support_close_kb():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Ок", callback_data="support_ok"),
          InlineKeyboardButton("🔒 Закрыть вопрос", callback_data="support_close")]
+    ])
+
+def admin_kb():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Сброс пароля", callback_data="admin_reset_password")],
+        [InlineKeyboardButton("📊 Аналитика", callback_data="admin_analytics")],
+        [InlineKeyboardButton("📝 История матчей", callback_data="admin_history")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")],
     ])
 
 # ============================================================
@@ -272,6 +292,10 @@ async def handle_text_message(update, context):
         await handle_login_step(update, context, step, text)
     elif flow == "support":
         await handle_support_message(update, context, text)
+    elif flow == "admin_reply":
+        await handle_admin_reply(update, context, text)
+    elif flow == "reset_password":
+        await handle_reset_password(update, context, text)
 
 async def handle_register_step(update, context, step, text):
     user = update.effective_user
@@ -305,7 +329,6 @@ async def handle_register_step(update, context, step, text):
             return
         state["data"]["password"] = hash_password(text)
         
-        # Регистрируем
         data = state["data"]
         await sb_insert("players", {
             "Telegram_id": user.id,
@@ -384,6 +407,7 @@ async def handle_support_message(update, context, text):
     TICKETS[ticket_id] = {
         "user_id": user.id,
         "nick": player.get("nick"),
+        "game_id": player.get("game_id"),
         "message": text,
         "status": "open"
     }
@@ -422,7 +446,7 @@ async def cb_support_reply(update, context):
     )
     set_state(q.from_user.id, "admin_reply", "await_reply", {"ticket_id": ticket_id})
 
-async def handle_admin_reply(update, context):
+async def handle_admin_reply(update, context, text):
     user = update.effective_user
     state = get_state(user.id)
     if not state or state["flow"] != "admin_reply":
@@ -434,14 +458,12 @@ async def handle_admin_reply(update, context):
         await update.message.reply_text("❌ Запрос не найден.")
         return
     
-    reply_text = update.message.text.strip()
-    
     # Отправляем ответ пользователю
     await context.bot.send_message(
         ticket["user_id"],
         f"📩 Ответ администратора на ваш запрос #{ticket_id}\n\n"
         f"Администратор: @{user.username or 'администратор'}\n"
-        f"Ответ: {reply_text}",
+        f"Ответ: {text}",
         reply_markup=support_close_kb()
     )
     
@@ -452,7 +474,7 @@ async def handle_admin_reply(update, context):
     await context.bot.send_message(
         ADMIN_CHAT_ID,
         f"✅ Ответ на запрос #{ticket_id} отправлен.\n\n"
-        f"Текст: {reply_text}",
+        f"Текст: {text}",
         reply_markup=support_close_kb()
     )
 
@@ -464,7 +486,7 @@ async def cb_support_ok(update, context):
 async def cb_support_close(update, context):
     q = update.callback_query
     await q.answer()
-    # Пытаемся найти тикет по сообщению
+    # Ищем открытый тикет у пользователя
     for tid, ticket in TICKETS.items():
         if ticket["user_id"] == q.from_user.id and ticket["status"] == "open":
             ticket["status"] = "closed"
@@ -488,14 +510,6 @@ async def cb_admin_panel(update, context):
         reply_markup=admin_kb()
     )
 
-def admin_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Сброс пароля", callback_data="admin_reset_password")],
-        [InlineKeyboardButton("📊 Аналитика", callback_data="admin_analytics")],
-        [InlineKeyboardButton("📝 История матчей", callback_data="admin_history")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")],
-    ])
-
 async def cb_admin_reset_password(update, context):
     q = update.callback_query
     await q.answer()
@@ -514,7 +528,7 @@ async def cb_admin_reset_password(update, context):
             f"@{p['nick']}",
             callback_data=f"reset_pass_{p['Telegram_id']}"
         )])
-    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="admin_back")])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")])
     
     await q.edit_message_text(
         "🔄 СБРОС ПАРОЛЯ\n\nВыберите игрока:",
@@ -544,13 +558,12 @@ async def cb_reset_password(update, context):
     
     await q.edit_message_text(f"✅ Пароль для @{player['nick']} сброшен.")
 
-async def handle_reset_password(update, context):
+async def handle_reset_password(update, context, text):
     user = update.effective_user
     state = get_state(user.id)
     if not state or state["flow"] != "reset_password":
         return
     
-    text = update.message.text.strip()
     if not PASSWORD_RE.match(text):
         await update.message.reply_text("❌ Пароль должен быть минимум 8 символов (латиница и цифры). Попробуйте:")
         return
@@ -560,7 +573,7 @@ async def handle_reset_password(update, context):
     await update.message.reply_text("✅ Пароль успешно обновлён!", reply_markup=main_kb())
 
 # ============================================================
-# PLACEHOLDERS
+# CB: BACK TO MENU, PROFILE, LEADERBOARD
 # ============================================================
 
 async def cb_back_to_menu(update, context):
@@ -608,6 +621,34 @@ async def cb_leaderboard(update, context):
     await q.edit_message_text("\n".join(lines), reply_markup=back_kb())
 
 # ============================================================
+# PLACEHOLDERS
+# ============================================================
+
+async def cb_find_match(update, context):
+    q = update.callback_query
+    await q.answer("В разработке", show_alert=True)
+
+async def cb_party_menu(update, context):
+    q = update.callback_query
+    await q.answer("В разработке", show_alert=True)
+
+async def cb_stats(update, context):
+    q = update.callback_query
+    await q.answer("В разработке", show_alert=True)
+
+async def cb_history(update, context):
+    q = update.callback_query
+    await q.answer("В разработке", show_alert=True)
+
+async def cb_reports_menu(update, context):
+    q = update.callback_query
+    await q.answer("В разработке", show_alert=True)
+
+async def cb_premium_menu(update, context):
+    q = update.callback_query
+    await q.answer("В разработке", show_alert=True)
+
+# ============================================================
 # HEALTH CHECK
 # ============================================================
 
@@ -649,14 +690,24 @@ def main():
 
     app.add_handler(CallbackQueryHandler(cb_register_start, pattern="^register_start$"))
     app.add_handler(CallbackQueryHandler(cb_login_start, pattern="^login_start$"))
+
     app.add_handler(CallbackQueryHandler(cb_support_reply, pattern="^support_reply_\\d+$"))
     app.add_handler(CallbackQueryHandler(cb_support_ok, pattern="^support_ok$"))
     app.add_handler(CallbackQueryHandler(cb_support_close, pattern="^support_close$"))
+
     app.add_handler(CallbackQueryHandler(cb_admin_panel, pattern="^admin_panel$"))
     app.add_handler(CallbackQueryHandler(cb_admin_reset_password, pattern="^admin_reset_password$"))
     app.add_handler(CallbackQueryHandler(cb_reset_password, pattern="^reset_pass_\\d+$"))
+
     app.add_handler(CallbackQueryHandler(cb_profile, pattern="^profile$"))
     app.add_handler(CallbackQueryHandler(cb_leaderboard, pattern="^leaderboard$"))
+
+    app.add_handler(CallbackQueryHandler(cb_find_match, pattern="^find_match$"))
+    app.add_handler(CallbackQueryHandler(cb_party_menu, pattern="^party_menu$"))
+    app.add_handler(CallbackQueryHandler(cb_stats, pattern="^stats$"))
+    app.add_handler(CallbackQueryHandler(cb_history, pattern="^history$"))
+    app.add_handler(CallbackQueryHandler(cb_reports_menu, pattern="^reports_menu$"))
+    app.add_handler(CallbackQueryHandler(cb_premium_menu, pattern="^premium_menu$"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
 
