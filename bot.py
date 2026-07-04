@@ -1,718 +1,905 @@
 import os
 import re
-import time
 import logging
-import asyncio
 import threading
-import hashlib
-from datetime import datetime, timezone
-from logging.handlers import RotatingFileHandler
+from datetime import datetime, timedelta, timezone
 
 import httpx
-from flask import Flask, jsonify
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from flask import Flask
+from dotenv import load_dotenv
+
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
 from telegram.ext import (
-    ApplicationBuilder,
+    Application,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
     ContextTypes,
+    ConversationHandler,
     filters,
 )
 
-# ============================================================
+# ---------------------------------------------------------------------------
 # CONFIG
-# ============================================================
+# ---------------------------------------------------------------------------
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_IDS = set(int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip().isdigit())
-ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")
-CHAT_LINK = os.environ.get("CHAT_LINK", "")
-REQUIRE_SUBSCRIPTION = os.environ.get("REQUIRE_SUBSCRIPTION", "false").lower() == "true"
-SUBSCRIPTION_CHAT_ID = os.environ.get("SUBSCRIPTION_CHAT_ID")
-OWNER_ID = int(os.environ.get("OWNER_ID", "0") or 0)
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+load_dotenv()
 
-MAPS = ["Sandstone", "Rust", "Province", "Breeze", "Dune", "Zone 7", "Hanami"]
-LOBBY_COUNT = 6
-LOBBY_SIZE = 10
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+PORT = int(os.getenv("PORT", "10000"))
 
-PREMIUM_PRICES = {
-    "1_day": {"label": "1 день", "stars": 50, "days": 1},
-    "1_week": {"label": "1 неделя", "stars": 350, "days": 7},
-    "1_month": {"label": "1 месяц", "stars": 1000, "days": 30},
-}
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
+
+# Conversation states
+(
+    REG_NICK, REG_ID, REG_PASS,
+    LOGIN_NICK, LOGIN_ID, LOGIN_PASS,
+    SUPPORT_MSG,
+    ADMIN_RESET_PICK, ADMIN_RESET_PASS,
+    ADMIN_REPLY_MSG,
+    CHANGE_NICK,
+) = range(11)
 
 RANKS = [
-    (0, 799, "🥉", 1), (800, 899, "🥉", 2), (900, 999, "🥉", 3),
-    (1000, 1099, "🥈", 4), (1100, 1199, "🥈", 5), (1200, 1299, "🥈", 6),
-    (1300, 1399, "🥇", 7), (1400, 1499, "🥇", 8), (1500, 1699, "💎", 9),
-    (1700, 999999, "👑", 10),
+    (0, "Без ранга"),
+    (900, "Бронза"),
+    (1100, "Серебро"),
+    (1300, "Золото"),
+    (1500, "Платина"),
+    (1700, "Алмаз"),
+    (1900, "Мастер"),
+    (2100, "Элита"),
+    (2300, "Легенда"),
 ]
 
-# ============================================================
-# LOGGING
-# ============================================================
+PREMIUM_PRICES = {
+    "1_day": {"label": "1 день — 5 ⭐", "stars": 5, "days": 1},
+    "1_week": {"label": "1 неделя — 39 ⭐", "stars": 39, "days": 7},
+    "1_month": {"label": "1 месяц — 111 ⭐", "stars": 111, "days": 30},
+}
 
-os.makedirs("logs", exist_ok=True)
-logger = logging.getLogger("strange_faceit")
-logger.setLevel(logging.INFO)
-handler = RotatingFileHandler("logs/bot.log", maxBytes=10*1024*1024, backupCount=5, encoding="utf-8")
-handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-logger.addHandler(handler)
-logger.addHandler(logging.StreamHandler())
+# Support tickets stored in-memory: ticket_id -> {"user_id": int, "username": str}
+SUPPORT_TICKETS = {}
+_ticket_counter = 0
 
-BOT_START_TIME = time.time()
 
-# ============================================================
+def next_ticket_id():
+    global _ticket_counter
+    _ticket_counter += 1
+    return _ticket_counter
+
+
+# ---------------------------------------------------------------------------
 # SUPABASE HELPERS
-# ============================================================
+# ---------------------------------------------------------------------------
 
-_http_client = None
+SB_HEADERS = {
+    "apikey": SUPABASE_KEY or "",
+    "Authorization": f"Bearer {SUPABASE_KEY}" if SUPABASE_KEY else "",
+    "Content-Type": "application/json",
+}
 
-def get_client():
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.AsyncClient(
-            base_url=f"{SUPABASE_URL}/rest/v1",
-            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"},
-            timeout=30.0,
-        )
-    return _http_client
 
-async def sb_select(table, params=None):
-    try:
-        r = await get_client().get(f"/{table}", params=params or {})
-        if r.status_code < 400:
-            return r.json()
-        return []
-    except:
-        return []
+def sb_client():
+    return httpx.Client(base_url=f"{SUPABASE_URL}/rest/v1", headers=SB_HEADERS, timeout=15)
 
-async def sb_insert(table, data):
-    try:
-        r = await get_client().post(f"/{table}", json=data, headers={"Prefer": "return=representation"})
-        if r.status_code < 400:
-            return r.json()
-        return []
-    except:
-        return []
 
-async def sb_update(table, params, data):
-    try:
-        r = await get_client().patch(f"/{table}", params=params, json=data, headers={"Prefer": "return=representation"})
-        if r.status_code < 400:
-            return r.json()
-        return []
-    except:
-        return []
+def get_player_by_tg(tg_id: int):
+    with sb_client() as c:
+        r = c.get("/players", params={"Telegram_id": f"eq.{tg_id}", "select": "*"})
+        r.raise_for_status()
+        data = r.json()
+        return data[0] if data else None
 
-async def sb_delete(table, params):
-    try:
-        r = await get_client().delete(f"/{table}", params=params)
-        return r.status_code < 400
-    except:
-        return False
 
-async def get_player_by_telegram(tid):
-    rows = await sb_select("players", {"Telegram_id": f"eq.{tid}", "limit": "1"})
-    return rows[0] if rows else None
+def get_player_by_nick(nick: str):
+    with sb_client() as c:
+        r = c.get("/players", params={"nick": f"eq.{nick}", "select": "*"})
+        r.raise_for_status()
+        data = r.json()
+        return data[0] if data else None
 
-async def get_player_by_nick(nick):
-    rows = await sb_select("players", {"nick": f"eq.{nick}", "limit": "1"})
-    return rows[0] if rows else None
 
-async def get_player_by_game_id(gid):
-    rows = await sb_select("players", {"game_id": f"eq.{gid}", "limit": "1"})
-    return rows[0] if rows else None
+def get_player_by_game_id(game_id: str):
+    with sb_client() as c:
+        r = c.get("/players", params={"game_id": f"eq.{game_id}", "select": "*"})
+        r.raise_for_status()
+        data = r.json()
+        return data[0] if data else None
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
 
-def calc_rank(elo):
-    for low, high, emoji, rank in RANKS:
-        if low <= elo <= high:
-            return rank, emoji
-    return 1, "🥉"
-
-# ============================================================
-# SUBSCRIPTION CHECK
-# ============================================================
-
-async def check_subscription(context, user_id):
-    if not REQUIRE_SUBSCRIPTION or not SUBSCRIPTION_CHAT_ID:
-        return True
-    try:
-        member = await context.bot.get_chat_member(SUBSCRIPTION_CHAT_ID, user_id)
-        return member.status in ("member", "administrator", "creator")
-    except:
-        return False
-
-def subscription_prompt_kb():
-    buttons = []
-    if CHAT_LINK:
-        buttons.append([InlineKeyboardButton("📢 Подписаться", url=CHAT_LINK)])
-    buttons.append([InlineKeyboardButton("✅ Я подписался", callback_data="check_sub")])
-    return InlineKeyboardMarkup(buttons)
-
-# ============================================================
-# CALLBACK: CHECK SUBSCRIPTION
-# ============================================================
-
-async def cb_check_sub(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    if await check_subscription(context, q.from_user.id):
-        await q.edit_message_text("Спасибо за подписку!", reply_markup=entry_kb())
-    else:
-        await q.answer("Вы ещё не подписались 🙁", show_alert=True)
-
-# ============================================================
-# STATE
-# ============================================================
-
-USER_STATE = {}
-TICKETS = {}
-TICKET_COUNTER = 0
-
-def set_state(user_id, flow, step, data=None):
-    USER_STATE[user_id] = {"flow": flow, "step": step, "data": data or {}}
-
-def get_state(user_id):
-    return USER_STATE.get(user_id)
-
-def clear_state(user_id):
-    USER_STATE.pop(user_id, None)
-
-# ============================================================
-# KEYBOARDS
-# ============================================================
-
-def entry_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔑 Вход", callback_data="login_start")],
-        [InlineKeyboardButton("📝 Регистрация", callback_data="register_start")],
-        [InlineKeyboardButton("🆘 Поддержка", callback_data="support")],
-    ])
-
-def main_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Найти матч", callback_data="find_match"),
-         InlineKeyboardButton("🎉 Пати", callback_data="party_menu")],
-        [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
-         InlineKeyboardButton("🏆 Топ", callback_data="leaderboard")],
-        [InlineKeyboardButton("📊 Статистика", callback_data="stats"),
-         InlineKeyboardButton("📝 История", callback_data="history")],
-        [InlineKeyboardButton("📢 Жалобы", callback_data="reports_menu"),
-         InlineKeyboardButton("💎 Премиум", callback_data="premium_menu")],
-        [InlineKeyboardButton("🆘 Поддержка", callback_data="support")],
-    ])
-
-def back_kb(callback="back_to_menu"):
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=callback)]])
-
-def support_reply_kb(ticket_id):
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✍️ Ответить", callback_data=f"support_reply_{ticket_id}")]
-    ])
-
-def support_close_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Ок", callback_data="support_ok"),
-         InlineKeyboardButton("🔒 Закрыть вопрос", callback_data="support_close")]
-    ])
-
-def admin_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 Сброс пароля", callback_data="admin_reset_password")],
-        [InlineKeyboardButton("📊 Аналитика", callback_data="admin_analytics")],
-        [InlineKeyboardButton("📝 История матчей", callback_data="admin_history")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")],
-    ])
-
-# ============================================================
-# REGISTER / LOGIN FLOW
-# ============================================================
-
-GAME_ID_RE = re.compile(r"^\d{8,15}$")
-NICK_RE = re.compile(r"^[A-Za-z0-9_]{2,32}$")
-PASSWORD_RE = re.compile(r"^[A-Za-z0-9]{8,}$")
-
-async def cmd_start(update, context):
-    user = update.effective_user
-    clear_state(user.id)
-
-    if not await check_subscription(context, user.id):
-        await update.message.reply_text(
-            "📢 Чтобы пользоваться ботом, подпишись на наш чат:",
-            reply_markup=subscription_prompt_kb()
-        )
-        return
-
-    player = await get_player_by_telegram(user.id)
-    if player:
-        await update.message.reply_text(f"С возвращением, {player.get('nick')}!", reply_markup=main_kb())
-        return
-
-    await update.message.reply_text("Добро пожаловать в Strange Faceit!", reply_markup=entry_kb())
-
-async def cb_register_start(update, context):
-    q = update.callback_query
-    await q.answer()
-    user_id = q.from_user.id
-    if await get_player_by_telegram(user_id):
-        await q.edit_message_text("Вы уже зарегистрированы.", reply_markup=back_kb())
-        return
-    set_state(user_id, "register", "await_nick")
-    await q.edit_message_text("📝 Регистрация\n\nВведите ваш игровой ник (2-32 символа):")
-
-async def cb_login_start(update, context):
-    q = update.callback_query
-    await q.answer()
-    user_id = q.from_user.id
-    if await get_player_by_telegram(user_id):
-        await q.edit_message_text("Вы уже вошли.", reply_markup=back_kb())
-        return
-    set_state(user_id, "login", "await_nick")
-    await q.edit_message_text("🔑 Вход\n\nВведите ваш игровой ник:")
-
-async def handle_text_message(update, context):
-    user = update.effective_user
-    state = get_state(user.id)
-    if not state:
-        return
-
-    flow, step = state["flow"], state["step"]
-    text = update.message.text.strip()
-
-    if flow == "register":
-        await handle_register_step(update, context, step, text)
-    elif flow == "login":
-        await handle_login_step(update, context, step, text)
-    elif flow == "support":
-        await handle_support_message(update, context, text)
-    elif flow == "admin_reply":
-        await handle_admin_reply(update, context, text)
-    elif flow == "reset_password":
-        await handle_reset_password(update, context, text)
-
-async def handle_register_step(update, context, step, text):
-    user = update.effective_user
-    state = get_state(user.id)
-
-    if step == "await_nick":
-        if not NICK_RE.match(text):
-            await update.message.reply_text("❌ Ник должен быть 2-32 символа (латиница, цифры, _). Попробуйте:")
-            return
-        if await get_player_by_nick(text):
-            await update.message.reply_text("❌ Этот ник уже занят. Введите другой:")
-            return
-        state["data"]["nick"] = text
-        state["step"] = "await_game_id"
-        await update.message.reply_text("Введите ваш ID в Standoff 2 (8-15 цифр):")
-
-    elif step == "await_game_id":
-        if not GAME_ID_RE.match(text):
-            await update.message.reply_text("❌ ID должен быть 8-15 цифр. Попробуйте:")
-            return
-        if await get_player_by_game_id(text):
-            await update.message.reply_text("❌ Этот ID уже зарегистрирован.\n\nЕсли это ваш аккаунт, попробуйте Вход или обратитесь в поддержку.")
-            return
-        state["data"]["game_id"] = text
-        state["step"] = "await_password"
-        await update.message.reply_text("Придумайте пароль (минимум 8 символов, латиница и цифры):")
-
-    elif step == "await_password":
-        if not PASSWORD_RE.match(text):
-            await update.message.reply_text("❌ Пароль должен быть минимум 8 символов (латиница и цифры). Попробуйте:")
-            return
-        state["data"]["password"] = hash_password(text)
-        
-        data = state["data"]
-        await sb_insert("players", {
-            "Telegram_id": user.id,
-            "game_id": data["game_id"],
-            "nick": data["nick"],
-            "password": data["password"],
-            "approved": True,
-            "elo": 1000,
-            "wins": 0,
-            "losses": 0,
-            "matches": 0,
-            "mvp": 0,
-        })
-        clear_state(user.id)
-        await update.message.reply_text(
-            f"✅ Регистрация завершена!\n\n"
-            f"Ник: {data['nick']}\n"
-            f"ID: {data['game_id']}\n\n"
-            f"Добро пожаловать в Strange Faceit!",
-            reply_markup=main_kb()
-        )
-
-async def handle_login_step(update, context, step, text):
-    user = update.effective_user
-    state = get_state(user.id)
-
-    if step == "await_nick":
-        player = await get_player_by_nick(text)
-        if not player:
-            await update.message.reply_text("❌ Игрок с таким ником не найден. Попробуйте снова или зарегистрируйтесь:")
-            return
-        state["data"]["player"] = player
-        state["step"] = "await_game_id"
-        await update.message.reply_text("Введите ваш ID в Standoff 2:")
-
-    elif step == "await_game_id":
-        player = state["data"]["player"]
-        if player.get("game_id") != text:
-            await update.message.reply_text("❌ ID не совпадает с ником. Попробуйте снова:")
-            return
-        state["step"] = "await_password"
-        await update.message.reply_text("Введите пароль:")
-
-    elif step == "await_password":
-        player = state["data"]["player"]
-        if player.get("password") != hash_password(text):
-            await update.message.reply_text("❌ Неверный пароль. Попробуйте снова:")
-            return
-        clear_state(user.id)
-        await update.message.reply_text(f"✅ Вход выполнен! С возвращением, {player.get('nick')}!", reply_markup=main_kb())
-
-# ============================================================
-# SUPPORT
-# ============================================================
-
-async def cb_support(update, context):
-    q = update.callback_query
-    await q.answer()
-    user_id = q.from_user.id
-    player = await get_player_by_telegram(user_id)
-    if not player:
-        await q.edit_message_text("Сначала зарегистрируйтесь!", reply_markup=back_kb())
-        return
-    set_state(user_id, "support", "await_message")
-    await q.edit_message_text("🆘 Поддержка\n\nОпишите вашу проблему одним сообщением:")
-
-async def handle_support_message(update, context, text):
-    user = update.effective_user
-    state = get_state(user.id)
-    player = await get_player_by_telegram(user.id)
-    
-    global TICKET_COUNTER
-    TICKET_COUNTER += 1
-    ticket_id = TICKET_COUNTER
-    
-    TICKETS[ticket_id] = {
-        "user_id": user.id,
-        "nick": player.get("nick"),
-        "game_id": player.get("game_id"),
-        "message": text,
-        "status": "open"
+def create_player(tg_id: int, nick: str, game_id: str, password: str):
+    payload = {
+        "Telegram_id": tg_id,
+        "nick": nick,
+        "game_id": game_id,
+        "password": password,
     }
-    
-    clear_state(user.id)
-    await update.message.reply_text("✅ Ваш запрос отправлен администраторам. Ожидайте ответа.")
-    
-    if ADMIN_CHAT_ID:
-        await context.bot.send_message(
-            ADMIN_CHAT_ID,
-            f"🆘 Новый запрос в поддержку #{ticket_id}\n\n"
-            f"👤 Ник: {player.get('nick')}\n"
-            f"🆔 ID: {player.get('game_id')}\n"
-            f"📝 Сообщение:\n{text}",
-            reply_markup=support_reply_kb(ticket_id)
+    with sb_client() as c:
+        r = c.post("/players", json=payload, headers={**SB_HEADERS, "Prefer": "return=representation"})
+        r.raise_for_status()
+        return r.json()
+
+
+def update_player(tg_id: int, fields: dict):
+    with sb_client() as c:
+        r = c.patch(
+            "/players",
+            params={"Telegram_id": f"eq.{tg_id}"},
+            json=fields,
+            headers={**SB_HEADERS, "Prefer": "return=representation"},
         )
+        r.raise_for_status()
+        return r.json()
 
-async def cb_support_reply(update, context):
-    q = update.callback_query
-    await q.answer()
-    if q.from_user.id not in ADMIN_IDS and q.from_user.id != OWNER_ID:
-        await q.answer("Нет прав", show_alert=True)
-        return
-    
-    ticket_id = int(q.data.split("_")[2])
-    ticket = TICKETS.get(ticket_id)
-    if not ticket or ticket["status"] == "closed":
-        await q.edit_message_text("⚠️ Запрос уже закрыт.")
-        return
-    
-    await q.edit_message_text(
-        f"✍️ Ответ на запрос #{ticket_id}\n\n"
-        f"Пользователь: {ticket['nick']}\n"
-        f"Вопрос: {ticket['message']}\n\n"
-        f"Введите ваш ответ:"
+
+def top_players(limit=10):
+    with sb_client() as c:
+        r = c.get(
+            "/players",
+            params={"select": "nick,elo,premium_until", "order": "elo.desc", "limit": str(limit)},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+def all_players(limit=200):
+    with sb_client() as c:
+        r = c.get("/players", params={"select": "Telegram_id,nick,game_id", "limit": str(limit)})
+        r.raise_for_status()
+        return r.json()
+
+
+# ---------------------------------------------------------------------------
+# VALIDATION HELPERS
+# ---------------------------------------------------------------------------
+
+NICK_RE = re.compile(r"^[A-Za-z0-9_]{2,32}$")
+ID_RE = re.compile(r"^\d{8,15}$")
+PASS_RE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9]{8,}$")
+
+
+def valid_nick(s: str) -> bool:
+    return bool(NICK_RE.match(s))
+
+
+def valid_game_id(s: str) -> bool:
+    return bool(ID_RE.match(s))
+
+
+def valid_password(s: str) -> bool:
+    return bool(PASS_RE.match(s))
+
+
+def rank_for_elo(elo: int) -> str:
+    rank = RANKS[0][1]
+    for threshold, name in RANKS:
+        if elo >= threshold:
+            rank = name
+    return rank
+
+
+def is_premium(player: dict) -> bool:
+    until = player.get("premium_until")
+    if not until:
+        return False
+    try:
+        dt = datetime.fromisoformat(until.replace("Z", "+00:00"))
+    except Exception:
+        return False
+    return dt > datetime.now(timezone.utc)
+
+
+def display_nick(player: dict) -> str:
+    tag = "💎 " if is_premium(player) else ""
+    return f"{tag}{player['nick']}"
+
+
+# ---------------------------------------------------------------------------
+# KEYBOARDS
+# ---------------------------------------------------------------------------
+
+def start_keyboard():
+    kb = [
+        [InlineKeyboardButton("🔑 Вход", callback_data="start_login")],
+        [InlineKeyboardButton("📝 Регистрация", callback_data="start_register")],
+        [InlineKeyboardButton("🆘 Поддержка", callback_data="start_support")],
+    ]
+    return InlineKeyboardMarkup(kb)
+
+
+def main_menu_keyboard():
+    kb = [
+        [InlineKeyboardButton("👤 Профиль", callback_data="menu_profile"),
+         InlineKeyboardButton("🏆 Топ игроков", callback_data="menu_top")],
+        [InlineKeyboardButton("💎 Премиум", callback_data="menu_premium"),
+         InlineKeyboardButton("✏️ Сменить ник", callback_data="menu_changenick")],
+        [InlineKeyboardButton("🎮 Найти игру", callback_data="menu_findgame"),
+         InlineKeyboardButton("📜 Правила", callback_data="menu_rules")],
+        [InlineKeyboardButton("🆘 Поддержка", callback_data="menu_support"),
+         InlineKeyboardButton("🚪 Выйти", callback_data="menu_logout")],
+    ]
+    return InlineKeyboardMarkup(kb)
+
+
+def back_to_menu_keyboard():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ В меню", callback_data="menu_back")]])
+
+
+def cancel_keyboard():
+    return ReplyKeyboardMarkup([["/cancel"]], resize_keyboard=True, one_time_keyboard=True)
+
+
+# ---------------------------------------------------------------------------
+# START / MENU
+# ---------------------------------------------------------------------------
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
+    await update.message.reply_text(
+        "👋 Добро пожаловать в матчмейкинг-бот Standoff 2!\n\n"
+        "Выберите действие:",
+        reply_markup=start_keyboard(),
     )
-    set_state(q.from_user.id, "admin_reply", "await_reply", {"ticket_id": ticket_id})
+    return ConversationHandler.END
 
-async def handle_admin_reply(update, context, text):
-    user = update.effective_user
-    state = get_state(user.id)
-    if not state or state["flow"] != "admin_reply":
-        return
-    
-    ticket_id = state["data"]["ticket_id"]
-    ticket = TICKETS.get(ticket_id)
-    if not ticket:
-        await update.message.reply_text("❌ Запрос не найден.")
-        return
-    
-    # Отправляем ответ пользователю
-    await context.bot.send_message(
-        ticket["user_id"],
-        f"📩 Ответ администратора на ваш запрос #{ticket_id}\n\n"
-        f"Администратор: @{user.username or 'администратор'}\n"
-        f"Ответ: {text}",
-        reply_markup=support_close_kb()
-    )
-    
-    clear_state(user.id)
-    await update.message.reply_text("✅ Ответ отправлен пользователю.")
-    
-    # Отправляем админу подтверждение
-    await context.bot.send_message(
-        ADMIN_CHAT_ID,
-        f"✅ Ответ на запрос #{ticket_id} отправлен.\n\n"
-        f"Текст: {text}",
-        reply_markup=support_close_kb()
-    )
 
-async def cb_support_ok(update, context):
-    q = update.callback_query
-    await q.answer()
-    await q.edit_message_text("✅ Принято. Спасибо!")
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
+    await update.message.reply_text("Отменено.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("Выберите действие:", reply_markup=start_keyboard())
+    return ConversationHandler.END
 
-async def cb_support_close(update, context):
-    q = update.callback_query
-    await q.answer()
-    # Ищем открытый тикет у пользователя
-    for tid, ticket in TICKETS.items():
-        if ticket["user_id"] == q.from_user.id and ticket["status"] == "open":
-            ticket["status"] = "closed"
-            await q.edit_message_text("🔒 Вопрос закрыт.")
-            return
-    await q.edit_message_text("⚠️ Вопрос уже закрыт.")
 
-# ============================================================
-# ADMIN: RESET PASSWORD
-# ============================================================
-
-async def cb_admin_panel(update, context):
-    q = update.callback_query
-    await q.answer()
-    if q.from_user.id not in ADMIN_IDS and q.from_user.id != OWNER_ID:
-        await q.answer("Нет прав", show_alert=True)
-        return
-    
-    await q.edit_message_text(
-        "👑 АДМИН-ПАНЕЛЬ\n\nВыберите действие:",
-        reply_markup=admin_kb()
-    )
-
-async def cb_admin_reset_password(update, context):
-    q = update.callback_query
-    await q.answer()
-    if q.from_user.id not in ADMIN_IDS and q.from_user.id != OWNER_ID:
-        await q.answer("Нет прав", show_alert=True)
-        return
-    
-    players = await sb_select("players", {"approved": "eq.true", "order": "nick.asc"})
-    if not players:
-        await q.edit_message_text("Нет зарегистрированных игроков.", reply_markup=back_kb())
-        return
-    
-    buttons = []
-    for p in players[:20]:
-        buttons.append([InlineKeyboardButton(
-            f"@{p['nick']}",
-            callback_data=f"reset_pass_{p['Telegram_id']}"
-        )])
-    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")])
-    
-    await q.edit_message_text(
-        "🔄 СБРОС ПАРОЛЯ\n\nВыберите игрока:",
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
-
-async def cb_reset_password(update, context):
-    q = update.callback_query
-    await q.answer()
-    if q.from_user.id not in ADMIN_IDS and q.from_user.id != OWNER_ID:
-        await q.answer("Нет прав", show_alert=True)
-        return
-    
-    tid = int(q.data.split("_")[2])
-    player = await get_player_by_telegram(tid)
-    if not player:
-        await q.edit_message_text("❌ Игрок не найден.")
-        return
-    
-    await sb_update("players", {"Telegram_id": f"eq.{tid}"}, {"password": None})
-    await context.bot.send_message(
-        tid,
-        "🔄 Ваш пароль был сброшен администратором.\n\n"
-        "Введите новый пароль (минимум 8 символов, латиница и цифры):"
-    )
-    set_state(tid, "reset_password", "await_password", {"nick": player["nick"]})
-    
-    await q.edit_message_text(f"✅ Пароль для @{player['nick']} сброшен.")
-
-async def handle_reset_password(update, context, text):
-    user = update.effective_user
-    state = get_state(user.id)
-    if not state or state["flow"] != "reset_password":
-        return
-    
-    if not PASSWORD_RE.match(text):
-        await update.message.reply_text("❌ Пароль должен быть минимум 8 символов (латиница и цифры). Попробуйте:")
-        return
-    
-    await sb_update("players", {"Telegram_id": f"eq.{user.id}"}, {"password": hash_password(text)})
-    clear_state(user.id)
-    await update.message.reply_text("✅ Пароль успешно обновлён!", reply_markup=main_kb())
-
-# ============================================================
-# CB: BACK TO MENU, PROFILE, LEADERBOARD
-# ============================================================
-
-async def cb_back_to_menu(update, context):
-    q = update.callback_query
-    await q.answer()
-    clear_state(q.from_user.id)
-    player = await get_player_by_telegram(q.from_user.id)
-    if player:
-        await q.edit_message_text("Главное меню:", reply_markup=main_kb())
+async def show_main_menu(update_or_query, context, edit=False):
+    text = "🏠 Главное меню"
+    if edit:
+        await update_or_query.edit_message_text(text, reply_markup=main_menu_keyboard())
     else:
-        await q.edit_message_text("Выберите действие:", reply_markup=entry_kb())
+        await update_or_query.message.reply_text(text, reply_markup=main_menu_keyboard())
 
-async def cb_profile(update, context):
-    q = update.callback_query
-    await q.answer()
-    player = await get_player_by_telegram(q.from_user.id)
+
+async def menu_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await show_main_menu(query, context, edit=True)
+
+
+async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Вы вышли из аккаунта")
+    context.user_data.clear()
+    await query.edit_message_text("Вы вышли. Выберите действие:", reply_markup=start_keyboard())
+
+
+# ---------------------------------------------------------------------------
+# REGISTRATION FLOW
+# ---------------------------------------------------------------------------
+
+async def reg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    tg_id = query.from_user.id
+    if get_player_by_tg(tg_id):
+        await query.edit_message_text("У вас уже есть аккаунт. Используйте «Вход».", reply_markup=start_keyboard())
+        return ConversationHandler.END
+    await query.edit_message_text(
+        "📝 Регистрация\n\nВведите ник (2-32 символа, латиница/цифры/подчёркивание):"
+    )
+    return REG_NICK
+
+
+async def reg_nick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    nick = update.message.text.strip()
+    if not valid_nick(nick):
+        await update.message.reply_text("❌ Некорректный ник. Только латиница, цифры, _ (2-32 символа). Попробуйте снова:")
+        return REG_NICK
+    if get_player_by_nick(nick):
+        await update.message.reply_text("❌ Этот ник уже занят. Введите другой:")
+        return REG_NICK
+    context.user_data["reg_nick"] = nick
+    await update.message.reply_text("Введите ваш ID в Standoff 2 (8-15 цифр):")
+    return REG_ID
+
+
+async def reg_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    game_id = update.message.text.strip()
+    if not valid_game_id(game_id):
+        await update.message.reply_text("❌ Некорректный ID. Введите 8-15 цифр:")
+        return REG_ID
+    if get_player_by_game_id(game_id):
+        await update.message.reply_text(
+            "❌ Этот игровой ID уже зарегистрирован другим аккаунтом.\n"
+            "Если это ошибка, обратитесь в поддержку: /start → 🆘 Поддержка."
+        )
+        return ConversationHandler.END
+    context.user_data["reg_id"] = game_id
+    await update.message.reply_text("Придумайте пароль (минимум 8 символов, латиница + цифры):")
+    return REG_PASS
+
+
+async def reg_pass(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    password = update.message.text.strip()
+    if not valid_password(password):
+        await update.message.reply_text("❌ Пароль слишком слабый. Нужно минимум 8 символов, латиница + цифры:")
+        return REG_PASS
+
+    tg_id = update.effective_user.id
+    nick = context.user_data["reg_nick"]
+    game_id = context.user_data["reg_id"]
+
+    try:
+        create_player(tg_id, nick, game_id, password)
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Registration error: {e.response.text}")
+        await update.message.reply_text("❌ Ошибка регистрации (возможно, ник/ID уже заняты). Попробуйте /start снова.")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    context.user_data.clear()
+    context.user_data["auth"] = True
+    await update.message.reply_text(f"✅ Регистрация успешна! Добро пожаловать, {nick}.")
+    await show_main_menu(update, context)
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
+# LOGIN FLOW
+# ---------------------------------------------------------------------------
+
+async def login_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("🔑 Вход\n\nВведите ваш ник:")
+    return LOGIN_NICK
+
+
+async def login_nick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    nick = update.message.text.strip()
+    player = get_player_by_nick(nick)
     if not player:
-        await q.edit_message_text("Профиль не найден.", reply_markup=back_kb())
+        await update.message.reply_text("❌ Игрок с таким ником не найден. Попробуйте снова или /cancel:")
+        return LOGIN_NICK
+    context.user_data["login_player"] = player
+    await update.message.reply_text("Введите ваш игровой ID:")
+    return LOGIN_ID
+
+
+async def login_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    game_id = update.message.text.strip()
+    player = context.user_data.get("login_player")
+    if not player or player.get("game_id") != game_id:
+        await update.message.reply_text("❌ ID не совпадает. Попробуйте снова или /cancel:")
+        return LOGIN_ID
+    await update.message.reply_text("Введите пароль:")
+    return LOGIN_PASS
+
+
+async def login_pass(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    password = update.message.text.strip()
+    player = context.user_data.get("login_player")
+    if not player or player.get("password") != password:
+        await update.message.reply_text("❌ Неверный пароль. Попробуйте снова или /cancel:")
+        return LOGIN_PASS
+
+    tg_id = update.effective_user.id
+    if player.get("Telegram_id") != tg_id:
+        update_player(player["Telegram_id"], {}) if False else None
+        # link this telegram account to the player record
+        try:
+            update_player(player["Telegram_id"], {"Telegram_id": tg_id})
+        except Exception as e:
+            logger.error(f"Failed to relink account: {e}")
+
+    context.user_data.clear()
+    context.user_data["auth"] = True
+    await update.message.reply_text(f"✅ Добро пожаловать, {player['nick']}!")
+    await show_main_menu(update, context)
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
+# PROFILE / TOP / PREMIUM
+# ---------------------------------------------------------------------------
+
+async def require_login(query, context) -> dict | None:
+    tg_id = query.from_user.id
+    player = get_player_by_tg(tg_id)
+    if not player:
+        await query.edit_message_text("Сначала войдите в аккаунт.", reply_markup=start_keyboard())
+        return None
+    return player
+
+
+async def menu_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    player = await require_login(query, context)
+    if not player:
         return
-    rank, emoji = calc_rank(player.get("elo", 1000))
+
+    rank = rank_for_elo(player.get("elo", 1000))
+    premium_line = "Нет"
+    if is_premium(player):
+        until = player["premium_until"][:16].replace("T", " ")
+        premium_line = f"Активен до {until}"
+
     text = (
         f"👤 Профиль\n\n"
-        f"Ник: {player.get('nick')}\n"
+        f"Ник: {display_nick(player)}\n"
         f"ID: {player.get('game_id')}\n"
-        f"Ранг: {emoji} #{rank}\n"
+        f"Ранг: {rank}\n"
         f"ELO: {player.get('elo', 1000)}\n"
         f"Матчи: {player.get('matches', 0)}\n"
         f"Победы: {player.get('wins', 0)}\n"
         f"Поражения: {player.get('losses', 0)}\n"
-        f"MVP: {player.get('mvp', 0)}"
+        f"MVP: {player.get('mvp', 0)}\n"
+        f"Премиум: {premium_line}"
     )
-    await q.edit_message_text(text, reply_markup=back_kb())
+    await query.edit_message_text(text, reply_markup=back_to_menu_keyboard())
 
-async def cb_leaderboard(update, context):
-    q = update.callback_query
-    await q.answer()
-    top = await sb_select("players", {"order": "elo.desc", "limit": "10", "approved": "eq.true"})
-    if not top:
-        await q.edit_message_text("Топ пуст.", reply_markup=back_kb())
+
+async def menu_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    players = top_players(10)
+    if not players:
+        text = "🏆 Топ игроков\n\nПока нет игроков."
+    else:
+        lines = ["🏆 Топ-10 игроков по ELO:\n"]
+        for i, p in enumerate(players, 1):
+            tag = "💎 " if is_premium(p) else ""
+            lines.append(f"{i}. {tag}{p['nick']} — {p['elo']} ELO")
+        text = "\n".join(lines)
+    await query.edit_message_text(text, reply_markup=back_to_menu_keyboard())
+
+
+async def menu_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    player = await require_login(query, context)
+    if not player:
         return
-    lines = ["🏆 Топ игроков\n"]
-    for i, p in enumerate(top, 1):
-        rank, emoji = calc_rank(p.get("elo", 1000))
-        lines.append(f"{i}. {p.get('nick')} — {p.get('elo')} ELO {emoji}")
-    await q.edit_message_text("\n".join(lines), reply_markup=back_kb())
 
-# ============================================================
-# PLACEHOLDERS
-# ============================================================
+    kb = [
+        [InlineKeyboardButton(v["label"], callback_data=f"premium_buy_{k}")]
+        for k, v in PREMIUM_PRICES.items()
+    ]
+    kb.append([InlineKeyboardButton("⬅️ В меню", callback_data="menu_back")])
 
-async def cb_find_match(update, context):
-    q = update.callback_query
-    await q.answer("В разработке", show_alert=True)
+    text = (
+        "💎 Премиум-подписка\n\n"
+        "Даёт:\n"
+        "• Премиальный тег 💎 рядом с ником\n"
+        "• Бесплатную смену ника без ограничений\n\n"
+        "Выберите период оплаты (в Telegram Stars):"
+    )
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb))
 
-async def cb_party_menu(update, context):
-    q = update.callback_query
-    await q.answer("В разработке", show_alert=True)
 
-async def cb_stats(update, context):
-    q = update.callback_query
-    await q.answer("В разработке", show_alert=True)
+async def premium_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    plan_key = query.data.replace("premium_buy_", "")
+    plan = PREMIUM_PRICES.get(plan_key)
+    if not plan:
+        await query.answer("Неизвестный план", show_alert=True)
+        return
 
-async def cb_history(update, context):
-    q = update.callback_query
-    await q.answer("В разработке", show_alert=True)
+    prices = [{"label": plan["label"], "amount": plan["stars"]}]
+    await context.bot.send_invoice(
+        chat_id=query.from_user.id,
+        title="Premium подписка",
+        description=plan["label"],
+        payload=f"premium_{plan_key}_{query.from_user.id}",
+        provider_token="",  # Telegram Stars payments use empty provider_token
+        currency="XTR",
+        prices=prices,
+    )
 
-async def cb_reports_menu(update, context):
-    q = update.callback_query
-    await q.answer("В разработке", show_alert=True)
 
-async def cb_premium_menu(update, context):
-    q = update.callback_query
-    await q.answer("В разработке", show_alert=True)
+async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.pre_checkout_query
+    await query.answer(ok=True)
 
-# ============================================================
-# HEALTH CHECK
-# ============================================================
+
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    payload = update.message.successful_payment.invoice_payload
+    parts = payload.split("_")
+    plan_key = "_".join(parts[1:-1])
+    plan = PREMIUM_PRICES.get(plan_key)
+    tg_id = update.effective_user.id
+
+    player = get_player_by_tg(tg_id)
+    if not player or not plan:
+        await update.message.reply_text("Оплата прошла, но произошла ошибка активации. Обратитесь в поддержку.")
+        return
+
+    now = datetime.now(timezone.utc)
+    current_until = None
+    if player.get("premium_until"):
+        try:
+            current_until = datetime.fromisoformat(player["premium_until"].replace("Z", "+00:00"))
+        except Exception:
+            current_until = None
+    base = current_until if current_until and current_until > now else now
+    new_until = base + timedelta(days=plan["days"])
+
+    update_player(tg_id, {"premium_until": new_until.isoformat()})
+    await update.message.reply_text(
+        f"✅ Премиум активирован до {new_until.strftime('%Y-%m-%d %H:%M')} UTC. Спасибо!",
+        reply_markup=main_menu_keyboard(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# CHANGE NICK
+# ---------------------------------------------------------------------------
+
+async def changenick_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    player = await require_login(query, context)
+    if not player:
+        return ConversationHandler.END
+
+    if not is_premium(player):
+        await query.edit_message_text(
+            "✏️ Смена ника доступна только премиум-игрокам.\n\n"
+            "Оформите 💎 Премиум в главном меню.",
+            reply_markup=back_to_menu_keyboard(),
+        )
+        return ConversationHandler.END
+
+    await query.edit_message_text("Введите новый ник (2-32 символа, латиница/цифры/подчёркивание):")
+    return CHANGE_NICK
+
+
+async def changenick_apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    nick = update.message.text.strip()
+    if not valid_nick(nick):
+        await update.message.reply_text("❌ Некорректный ник. Попробуйте снова:")
+        return CHANGE_NICK
+    if get_player_by_nick(nick):
+        await update.message.reply_text("❌ Этот ник уже занят. Введите другой:")
+        return CHANGE_NICK
+
+    tg_id = update.effective_user.id
+    try:
+        update_player(tg_id, {"nick": nick})
+    except httpx.HTTPStatusError:
+        await update.message.reply_text("❌ Не удалось сменить ник. Попробуйте позже.")
+        return ConversationHandler.END
+
+    await update.message.reply_text(f"✅ Ник изменён на {nick}.")
+    await show_main_menu(update, context)
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
+# FIND GAME / RULES (placeholders, simple & reliable)
+# ---------------------------------------------------------------------------
+
+async def menu_findgame(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    player = await require_login(query, context)
+    if not player:
+        return
+    await query.edit_message_text(
+        "🎮 Поиск игры\n\nФункция матчмейкинга скоро появится! Следите за обновлениями.",
+        reply_markup=back_to_menu_keyboard(),
+    )
+
+
+async def menu_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    text = (
+        "📜 Правила\n\n"
+        "1. Уважайте других игроков.\n"
+        "2. Читерство и договорные матчи запрещены.\n"
+        "3. Оскорбления и токсичность караются баном.\n"
+        "4. По всем вопросам — обращайтесь в поддержку."
+    )
+    await query.edit_message_text(text, reply_markup=back_to_menu_keyboard())
+
+
+# ---------------------------------------------------------------------------
+# SUPPORT
+# ---------------------------------------------------------------------------
+
+async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("🆘 Напишите ваше сообщение в поддержку одним сообщением (или /cancel):")
+    return SUPPORT_MSG
+
+
+async def support_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    text = update.message.text
+
+    ticket_id = next_ticket_id()
+    SUPPORT_TICKETS[ticket_id] = {
+        "user_id": user.id,
+        "username": user.username or user.first_name or str(user.id),
+    }
+
+    if OWNER_ID:
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("✍️ Ответить", callback_data=f"admin_reply_{ticket_id}")]]
+        )
+        try:
+            await context.bot.send_message(
+                chat_id=OWNER_ID,
+                text=f"🆘 Новый тикет #{ticket_id}\nОт: @{SUPPORT_TICKETS[ticket_id]['username']} (id {user.id})\n\n{text}",
+                reply_markup=kb,
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify owner: {e}")
+
+    await update.message.reply_text("✅ Сообщение отправлено в поддержку. Мы ответим вам здесь же.")
+    await show_main_menu(update, context)
+    return ConversationHandler.END
+
+
+async def admin_reply_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.from_user.id != OWNER_ID:
+        await query.answer("Нет доступа", show_alert=True)
+        return ConversationHandler.END
+
+    ticket_id = int(query.data.replace("admin_reply_", ""))
+    if ticket_id not in SUPPORT_TICKETS:
+        await query.edit_message_text("Тикет не найден или уже закрыт.")
+        return ConversationHandler.END
+
+    context.user_data["reply_ticket"] = ticket_id
+    await query.message.reply_text(f"Введите ответ для тикета #{ticket_id} (или /cancel):")
+    return ADMIN_REPLY_MSG
+
+
+async def admin_reply_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ticket_id = context.user_data.get("reply_ticket")
+    ticket = SUPPORT_TICKETS.get(ticket_id)
+    if not ticket:
+        await update.message.reply_text("Тикет не найден.")
+        return ConversationHandler.END
+
+    try:
+        await context.bot.send_message(
+            chat_id=ticket["user_id"],
+            text=f"🆘 Ответ поддержки:\n\n{update.message.text}",
+        )
+        await update.message.reply_text("✅ Ответ отправлен пользователю.")
+    except Exception as e:
+        logger.error(f"Failed to send reply: {e}")
+        await update.message.reply_text("❌ Не удалось отправить ответ (пользователь мог заблокировать бота).")
+
+    SUPPORT_TICKETS.pop(ticket_id, None)
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
+# ADMIN PANEL
+# ---------------------------------------------------------------------------
+
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        await update.message.reply_text("⛔ Нет доступа.")
+        return ConversationHandler.END
+
+    kb = [[InlineKeyboardButton("🔑 Сброс пароля игрока", callback_data="admin_resetpass")]]
+    await update.message.reply_text("🛠 Админ-панель", reply_markup=InlineKeyboardMarkup(kb))
+    return ConversationHandler.END
+
+
+async def admin_resetpass_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.from_user.id != OWNER_ID:
+        return ConversationHandler.END
+
+    players = all_players(50)
+    if not players:
+        await query.edit_message_text("Нет зарегистрированных игроков.")
+        return ConversationHandler.END
+
+    kb = [
+        [InlineKeyboardButton(f"{p['nick']} ({p['game_id']})", callback_data=f"admin_reset_{p['Telegram_id']}")]
+        for p in players
+    ]
+    await query.edit_message_text("Выберите игрока для сброса пароля:", reply_markup=InlineKeyboardMarkup(kb))
+    return ADMIN_RESET_PICK
+
+
+async def admin_resetpass_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    tg_id = int(query.data.replace("admin_reset_", ""))
+    context.user_data["reset_tg_id"] = tg_id
+    await query.message.reply_text("Введите новый пароль для игрока (мин. 8 символов, латиница+цифры):")
+    return ADMIN_RESET_PASS
+
+
+async def admin_resetpass_apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    password = update.message.text.strip()
+    if not valid_password(password):
+        await update.message.reply_text("❌ Пароль слишком слабый. Попробуйте снова:")
+        return ADMIN_RESET_PASS
+
+    tg_id = context.user_data.get("reset_tg_id")
+    try:
+        update_player(tg_id, {"password": password})
+        await update.message.reply_text("✅ Пароль сброшен.")
+        try:
+            await context.bot.send_message(chat_id=tg_id, text="🔑 Ваш пароль был сброшен администратором. Обратитесь в поддержку, если это не вы запрашивали.")
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error(f"Reset password failed: {e}")
+        await update.message.reply_text("❌ Ошибка сброса пароля.")
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
+# FALLBACK / ERROR HANDLING
+# ---------------------------------------------------------------------------
+
+async def unknown_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"Update {update} caused error {context.error}")
+
+
+# ---------------------------------------------------------------------------
+# FLASK KEEP-ALIVE (for Render web service)
+# ---------------------------------------------------------------------------
 
 flask_app = Flask(__name__)
 
-@flask_app.route("/health")
+
+@flask_app.route("/")
 def health():
-    return jsonify({"status": "ok", "uptime": round(time.time() - BOT_START_TIME, 1)})
+    return "OK", 200
+
 
 def run_flask():
-    flask_app.run(host="0.0.0.0", port=8080)
+    flask_app.run(host="0.0.0.0", port=PORT)
 
-# ============================================================
+
+# ---------------------------------------------------------------------------
 # MAIN
-# ============================================================
-
-def ensure_event_loop():
-    try:
-        asyncio.get_event_loop()
-    except RuntimeError:
-        asyncio.set_event_loop(asyncio.new_event_loop())
+# ---------------------------------------------------------------------------
 
 def main():
-    ensure_event_loop()
     if not BOT_TOKEN:
-        raise RuntimeError("BOT_TOKEN is not set")
+        raise RuntimeError("BOT_TOKEN env var is required")
     if not SUPABASE_URL or not SUPABASE_KEY:
-        raise RuntimeError("SUPABASE_URL / SUPABASE_KEY are not set")
+        raise RuntimeError("SUPABASE_URL and SUPABASE_KEY env vars are required")
 
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    # /start always works, even mid-conversation
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("cancel", cancel))
+    application.add_handler(CommandHandler("admin", admin_panel))
+
+    # Registration
+    reg_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(reg_start, pattern="^start_register$")],
+        states={
+            REG_NICK: [MessageHandler(filters.TEXT & ~filters.COMMAND, reg_nick)],
+            REG_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, reg_id)],
+            REG_PASS: [MessageHandler(filters.TEXT & ~filters.COMMAND, reg_pass)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
+    )
+    application.add_handler(reg_conv)
+
+    # Login
+    login_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(login_start, pattern="^start_login$")],
+        states={
+            LOGIN_NICK: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_nick)],
+            LOGIN_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_id)],
+            LOGIN_PASS: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_pass)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
+    )
+    application.add_handler(login_conv)
+
+    # Change nick
+    changenick_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(changenick_start, pattern="^menu_changenick$")],
+        states={
+            CHANGE_NICK: [MessageHandler(filters.TEXT & ~filters.COMMAND, changenick_apply)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
+    )
+    application.add_handler(changenick_conv)
+
+    # Support (user side)
+    support_conv = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(support_start, pattern="^start_support$"),
+            CallbackQueryHandler(support_start, pattern="^menu_support$"),
+        ],
+        states={
+            SUPPORT_MSG: [MessageHandler(filters.TEXT & ~filters.COMMAND, support_receive)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("start", start)],
+    )
+    application.add_handler(support_conv)
+
+    # Support (admin reply)
+    admin_reply_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_reply_start, pattern="^admin_reply_")],
+        states={
+            ADMIN_REPLY_MSG: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_reply_send)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    application.add_handler(admin_reply_conv)
+
+    # Admin reset password
+    admin_reset_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_resetpass_list, pattern="^admin_resetpass$")],
+        states={
+            ADMIN_RESET_PICK: [CallbackQueryHandler(admin_resetpass_pick, pattern="^admin_reset_")],
+            ADMIN_RESET_PASS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_resetpass_apply)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    application.add_handler(admin_reset_conv)
+
+    # Simple menu callbacks
+    application.add_handler(CallbackQueryHandler(menu_back, pattern="^menu_back$"))
+    application.add_handler(CallbackQueryHandler(logout, pattern="^menu_logout$"))
+    application.add_handler(CallbackQueryHandler(menu_profile, pattern="^menu_profile$"))
+    application.add_handler(CallbackQueryHandler(menu_top, pattern="^menu_top$"))
+    application.add_handler(CallbackQueryHandler(menu_premium, pattern="^menu_premium$"))
+    application.add_handler(CallbackQueryHandler(premium_buy, pattern="^premium_buy_"))
+    application.add_handler(CallbackQueryHandler(menu_findgame, pattern="^menu_findgame$"))
+    application.add_handler(CallbackQueryHandler(menu_rules, pattern="^menu_rules$"))
+
+    # Payments
+    from telegram.ext import PreCheckoutQueryHandler
+    application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+
+    # Fallback for stray callbacks
+    application.add_handler(CallbackQueryHandler(unknown_callback))
+
+    application.add_error_handler(error_handler)
+
+    # Run Flask in background thread (Render health check)
     threading.Thread(target=run_flask, daemon=True).start()
 
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    logger.info("Bot started, polling...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
-    app.add_handler(CommandHandler("start", cmd_start))
-
-    app.add_handler(CallbackQueryHandler(cb_check_sub, pattern="^check_sub$"))
-    app.add_handler(CallbackQueryHandler(cb_back_to_menu, pattern="^back_to_menu$"))
-    app.add_handler(CallbackQueryHandler(cb_support, pattern="^support$"))
-
-    app.add_handler(CallbackQueryHandler(cb_register_start, pattern="^register_start$"))
-    app.add_handler(CallbackQueryHandler(cb_login_start, pattern="^login_start$"))
-
-    app.add_handler(CallbackQueryHandler(cb_support_reply, pattern="^support_reply_\\d+$"))
-    app.add_handler(CallbackQueryHandler(cb_support_ok, pattern="^support_ok$"))
-    app.add_handler(CallbackQueryHandler(cb_support_close, pattern="^support_close$"))
-
-    app.add_handler(CallbackQueryHandler(cb_admin_panel, pattern="^admin_panel$"))
-    app.add_handler(CallbackQueryHandler(cb_admin_reset_password, pattern="^admin_reset_password$"))
-    app.add_handler(CallbackQueryHandler(cb_reset_password, pattern="^reset_pass_\\d+$"))
-
-    app.add_handler(CallbackQueryHandler(cb_profile, pattern="^profile$"))
-    app.add_handler(CallbackQueryHandler(cb_leaderboard, pattern="^leaderboard$"))
-
-    app.add_handler(CallbackQueryHandler(cb_find_match, pattern="^find_match$"))
-    app.add_handler(CallbackQueryHandler(cb_party_menu, pattern="^party_menu$"))
-    app.add_handler(CallbackQueryHandler(cb_stats, pattern="^stats$"))
-    app.add_handler(CallbackQueryHandler(cb_history, pattern="^history$"))
-    app.add_handler(CallbackQueryHandler(cb_reports_menu, pattern="^reports_menu$"))
-    app.add_handler(CallbackQueryHandler(cb_premium_menu, pattern="^premium_menu$"))
-
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
-
-    logger.info("🤖 Strange Faceit запущен!")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
