@@ -56,7 +56,7 @@ RANKS = [
 
 os.makedirs("logs", exist_ok=True)
 logger = logging.getLogger("strange_faceit")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 handler = RotatingFileHandler("logs/bot.log", maxBytes=10*1024*1024, backupCount=5, encoding="utf-8")
 handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 logger.addHandler(handler)
@@ -83,23 +83,27 @@ def get_client():
 async def sb_select(table, params=None):
     try:
         r = await get_client().get(f"/{table}", params=params or {})
+        logger.debug(f"sb_select {table}: {r.status_code}")
         if r.status_code < 400:
             return r.json()
         logger.error(f"sb_select {table} error: {r.status_code} {r.text}")
         return []
     except Exception as e:
-        logger.error(f"sb_select {table} exception: {e}")
+        logger.error(f"sb_select exception: {e}")
         return []
 
 async def sb_insert(table, data):
     try:
+        logger.info(f"📝 INSERT {table}: {data}")
         r = await get_client().post(f"/{table}", json=data, headers={"Prefer": "return=representation"})
+        logger.info(f"📊 RESPONSE: {r.status_code}")
         if r.status_code < 400:
+            logger.info(f"✅ УСПЕШНО: {r.json()}")
             return r.json()
-        logger.error(f"sb_insert {table} error: {r.status_code} {r.text}")
+        logger.error(f"❌ ОШИБКА: {r.status_code} {r.text}")
         return []
     except Exception as e:
-        logger.error(f"sb_insert {table} exception: {e}")
+        logger.error(f"❌ ИСКЛЮЧЕНИЕ: {e}")
         return []
 
 async def sb_update(table, params, data):
@@ -107,10 +111,10 @@ async def sb_update(table, params, data):
         r = await get_client().patch(f"/{table}", params=params, json=data, headers={"Prefer": "return=representation"})
         if r.status_code < 400:
             return r.json()
-        logger.error(f"sb_update {table} error: {r.status_code} {r.text}")
+        logger.error(f"sb_update error: {r.status_code} {r.text}")
         return []
     except Exception as e:
-        logger.error(f"sb_update {table} exception: {e}")
+        logger.error(f"sb_update exception: {e}")
         return []
 
 async def sb_delete(table, params):
@@ -118,7 +122,7 @@ async def sb_delete(table, params):
         r = await get_client().delete(f"/{table}", params=params)
         return r.status_code < 400
     except Exception as e:
-        logger.error(f"sb_delete {table} exception: {e}")
+        logger.error(f"sb_delete exception: {e}")
         return False
 
 async def get_player(tid):
@@ -482,7 +486,9 @@ async def handle_register_photo(update: Update, context: ContextTypes.DEFAULT_TY
     photo_id = update.message.photo[-1].file_id
     data = state["data"]
 
-    logger.info(f"📝 Заявка: {user.id}, {data['game_id']}, {data['nick']}")
+    logger.info(f"📝 ЗАЯВКА: user={user.id}, game_id={data['game_id']}, nick={data['nick']}")
+    logger.info(f"🔗 SUPABASE_URL: {SUPABASE_URL}")
+    logger.info(f"🔑 SUPABASE_KEY: {SUPABASE_KEY[:30]}...")
 
     result = await sb_insert("pending", {
         "telegram_id": user.id,
@@ -492,9 +498,11 @@ async def handle_register_photo(update: Update, context: ContextTypes.DEFAULT_TY
     })
 
     if not result:
-        logger.error("❌ Ошибка сохранения заявки")
+        logger.error("❌ ЗАЯВКА НЕ СОХРАНИЛАСЬ!")
         await update.message.reply_text("❌ Ошибка сохранения. Попробуйте позже.")
         return
+
+    logger.info(f"✅ ЗАЯВКА СОХРАНЕНА: {result}")
 
     clear_state(user.id)
     await update.message.reply_text("✅ Заявка отправлена админам!")
