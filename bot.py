@@ -171,7 +171,7 @@ def vk(lid,maps): return InlineKeyboardMarkup([[InlineKeyboardButton(m,callback_
 def ak(): return InlineKeyboardMarkup([[InlineKeyboardButton("➕ ELO",callback_data="admin_giveelo")],[InlineKeyboardButton("🚫 Бан",callback_data="admin_ban")],[InlineKeyboardButton("✅ Разбан",callback_data="admin_unban")],[InlineKeyboardButton("✏️ Ник",callback_data="admin_setnick")],[InlineKeyboardButton("🆔 ID",callback_data="admin_setgameid")],[InlineKeyboardButton("🔑 Пароль",callback_data="admin_resetpass")],[InlineKeyboardButton("🎟 Промокод",callback_data="admin_createpromo")]])
 
 # ===== СОСТОЯНИЯ =====
-(REG_NICK,REG_GAMEID,REG_PASSWORD,LOGIN_NICK,LOGIN_GAMEID,LOGIN_PASSWORD,CHANGE_NICK_NEW,PROMO_INPUT,SUPPORT_MESSAGE,PARTY_USERNAME,ADMIN_PROMO_DAYS,ADMIN_GIVEELO_TARGET,ADMIN_GIVEELO_AMOUNT,ADMIN_BAN_TARGET,ADMIN_UNBAN_TARGET,ADMIN_SETNICK_TARGET,ADMIN_SETNICK_NEW,ADMIN_SETGAMEID_TARGET,ADMIN_SETGAMEID_NEW,ADMIN_RESETPASS_TARGET,ADMIN_RESETPASS_NEW)=range(22)
+(REG_NICK,REG_GAMEID,REG_PASSWORD,LOGIN_NICK,LOGIN_GAMEID,LOGIN_PASSWORD,CHANGE_NICK_NEW,PROMO_INPUT,SUPPORT_MESSAGE,PARTY_USERNAME,ADMIN_PROMO_DAYS,ADMIN_GIVEELO_TARGET,ADMIN_GIVEELO_AMOUNT,ADMIN_BAN_TARGET,ADMIN_UNBAN_TARGET,ADMIN_SETNICK_TARGET,ADMIN_SETNICK_NEW,ADMIN_SETGAMEID_TARGET,ADMIN_SETGAMEID_NEW,ADMIN_RESETPASS_TARGET,ADMIN_RESETPASS_NEW)=range(21)
 SUPPORT_REPLY_TARGET={}
 LOBBIES={}
 
