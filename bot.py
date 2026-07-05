@@ -1221,6 +1221,120 @@ def main():
     app.add_handler(CallbackQueryHandler(back, pattern="^back$"))
     app.add_handler(CallbackQueryHandler(logout, pattern="^logout$"))
     app.add_handler(CallbackQueryHandler(menu_profile, pattern="^profile$"))
+    app.add_handler(CallbackQueryHandler(# ============================== MAIN ==============================
+
+def main():
+    ensure_event_loop()
+
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN is required")
+        return
+
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        logger.error("SUPABASE_URL and SUPABASE_KEY are required")
+        return
+
+    # Запускаем Flask для healthcheck
+    threading.Thread(target=run_flask, daemon=True).start()
+    logger.info(f"Flask running on port {PORT}")
+
+    # Создаём приложение
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    # ===== ПРИНУДИТЕЛЬНО УДАЛЯЕМ ВЕБХУК =====
+    try:
+        resp = requests.get(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
+        )
+        logger.info(f"webhook deleted: {resp.json()}")
+    except Exception as e:
+        logger.error(f"webhook delete error: {e}")
+
+    # ===== КОМАНДЫ =====
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("admin", cmd_admin))
+    app.add_handler(CommandHandler("cancel", cmd_cancel))
+    app.add_handler(CommandHandler("promo", cmd_promo))
+
+    # ===== РЕГИСТРАЦИЯ =====
+    reg_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(reg_start, pattern="^register$")],
+        states={
+            REG_NICK: [MessageHandler(filters.TEXT & ~filters.COMMAND, reg_nick)],
+            REG_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, reg_id)],
+            REG_PASS: [MessageHandler(filters.TEXT & ~filters.COMMAND, reg_pass)],
+        },
+        fallbacks=[CommandHandler("cancel", cmd_cancel)],
+    )
+    app.add_handler(reg_conv)
+
+    # ===== ВХОД =====
+    login_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(login_start, pattern="^login$")],
+        states={
+            LOGIN_NICK: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_nick)],
+            LOGIN_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_id)],
+            LOGIN_PASS: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_pass)],
+        },
+        fallbacks=[CommandHandler("cancel", cmd_cancel)],
+    )
+    app.add_handler(login_conv)
+
+    # ===== СМЕНА НИКА =====
+    changenick_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(changenick_start, pattern="^changenick$")],
+        states={
+            REG_NICK: [MessageHandler(filters.TEXT & ~filters.COMMAND, changenick_apply)],
+        },
+        fallbacks=[CommandHandler("cancel", cmd_cancel)],
+    )
+    app.add_handler(changenick_conv)
+
+    # ===== ПОДДЕРЖКА =====
+    support_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(support_start, pattern="^support$")],
+        states={
+            SUPPORT_MSG: [MessageHandler(filters.TEXT & ~filters.COMMAND, support_receive)],
+        },
+        fallbacks=[CommandHandler("cancel", cmd_cancel)],
+    )
+    app.add_handler(support_conv)
+
+    # ===== ОТВЕТ АДМИНА =====
+    admin_reply_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_reply_start, pattern="^reply_")],
+        states={
+            ADMIN_REPLY: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_reply_send)],
+        },
+        fallbacks=[CommandHandler("cancel", cmd_cancel)],
+    )
+    app.add_handler(admin_reply_conv)
+
+    # ===== ПРОМОКОДЫ =====
+    promo_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(promo_enter, pattern="^promo_enter$")],
+        states={
+            PROMO_ENTER: [MessageHandler(filters.TEXT & ~filters.COMMAND, promo_apply)],
+        },
+        fallbacks=[CommandHandler("cancel", cmd_cancel)],
+    )
+    app.add_handler(promo_conv)
+
+    # ===== СБРОС ПАРОЛЯ (АДМИН) =====
+    admin_reset_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_reset_list, pattern="^admin_reset$")],
+        states={
+            ADMIN_REPLY: [CallbackQueryHandler(admin_reset_pick, pattern="^reset_")],
+            RESET_PASS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_reset_apply)],
+        },
+        fallbacks=[CommandHandler("cancel", cmd_cancel)],
+    )
+    app.add_handler(admin_reset_conv)
+
+    # ===== CALLBACK-КНОПКИ =====
+    app.add_handler(CallbackQueryHandler(back, pattern="^back$"))
+    app.add_handler(CallbackQueryHandler(logout, pattern="^logout$"))
+    app.add_handler(CallbackQueryHandler(menu_profile, pattern="^profile$"))
     app.add_handler(CallbackQueryHandler(menu_top, pattern="^top$"))
     app.add_handler(CallbackQueryHandler(menu_stats, pattern="^stats$"))
     app.add_handler(CallbackQueryHandler(extended_stats, pattern="^extended_stats$"))
@@ -1246,8 +1360,10 @@ def main():
 
     app.add_error_handler(error_handler)
 
+    # ===== ЗАПУСК БОТА =====
     logger.info("🤖 Bot started, polling...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == "__main__":
     main()
