@@ -300,38 +300,61 @@ async def admin_promo_create(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # ============================== РЕГИСТРАЦИЯ ==============================
 
-async def reg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if get_player_by_tg(query.from_user.id):
-        await query.edit_message_text("✅ Уже зарегистрированы.", reply_markup=start_keyboard())
+ async def reg_pass(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка ввода пароля при регистрации"""
+    password = update.message.text.strip()
+    
+    # Проверка пароля
+    if not valid_password(password):
+        await update.message.reply_text(
+            "❌ Слабый пароль. Попробуйте снова:\n"
+            "• Минимум 8 символов\n"
+            "• Буквы и цифры\n"
+            "• Специальные символы приветствуются"
+        )
+        return REG_PASS  # Остаёмся в диалоге для повторного ввода
+    
+    # Получаем данные из контекста
+    tg_id = update.effective_user.id
+    nick = context.user_data.get("nick")
+    game_id = context.user_data.get("game_id")
+    
+    # Проверка наличия обязательных данных
+    if not nick or not game_id:
+        await update.message.reply_text(
+            "❌ Ошибка: сессия регистрации истекла. Начните заново.",
+            reply_markup=start_keyboard()
+        )
+        context.user_data.clear()
         return ConversationHandler.END
-
-    await query.edit_message_text(
-        "📝 РЕГИСТРАЦИЯ\n\nВведите ник (2-32 символа, латиница/цифры/_):"
-    )
-    return REG_NICK
-
-async def reg_nick(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    nick = update.message.text.strip()
-    if not valid_nick(nick):
-        await update.message.reply_text("❌ Некорректный ник. Попробуйте:")
-        return REG_NICK
-    if get_player_by_nick(nick):
-        await update.message.reply_text("❌ Ник занят. Введите другой:")
-        return REG_NICK
-    context.user_data["nick"] = nick
-    await update.message.reply_text("📝 Введите ID в Standoff 2 (8-15 цифр):")
-    return REG_ID
-
-async def reg_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    game_id = update.message.text.strip()
-    if not valid_game_id(game_id):
-        await update.message.reply_text("❌ Некорректный ID. Попробуйте:")
-        return REG_ID
-    if get_player_by_game_id(game_id):
-        await update.message.reply_text("❌ ID занят. Обратитесь в поддержку.")
-        return ConversationHandler.END
+    
+    # Создание игрока
+    try:
+        if create_player(tg_id, nick, game_id, password):
+            # Успешная регистрация
+            context.user_data.clear()  # Очищаем временные данные
+            await update.message.reply_text(
+                f"✅ РЕГИСТРАЦИЯ УСПЕШНА!\n\n"
+                f"Добро пожаловать, {nick}! 🎉\n"
+                f"Теперь вы можете участвовать в игре {game_id}",
+                reply_markup=main_menu_keyboard()
+            )
+        else:
+            # Ошибка создания игрока
+            await update.message.reply_text(
+                "❌ Ошибка регистрации. Возможно, ник уже занят.\n"
+                "Попробуйте позже или выберите другой ник.",
+                reply_markup=start_keyboard()
+            )
+    except Exception as e:
+        # Логируем ошибку
+        logger.error(f"Registration error for user {tg_id}: {e}")
+        await update.message.reply_text(
+            "❌ Техническая ошибка. Попробуйте позже.",
+            reply_markup=start_keyboard()
+        )
+    
+    return ConversationHandler.END  # 🔥 Завершаем диалог в любом случае
     context.user_data["game_id"] = game_id
     await update.message.reply_text("📝 Придумайте пароль (мин. 8 символов, латиница + цифры):")
     return REG_PASS
