@@ -547,6 +547,9 @@ async def post_init(app):
     except: pass
 
 def main():
+    import asyncio
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    
     global LOBBIES
     LOBBIES=dbll()
     logger.info(f"Загружено {len(LOBBIES)} лобби из Supabase")
