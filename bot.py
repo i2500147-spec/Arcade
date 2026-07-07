@@ -645,55 +645,48 @@ def main():
     logger.info(f"Загружено {len(LOBBIES)} лобби из Supabase")
     threading.Thread(target=run_flask,daemon=True).start()
     app=ApplicationBuilder().token(BOT_TOKEN).build()
-    app.post_init=post_init
-    
-    app.add_handler(CommandHandler("start",start))
-    app.add_handler(CommandHandler("cancel",cancel))
-    app.add_handler(CommandHandler("profile",profile))
-    app.add_handler(CommandHandler("top",top))
-    app.add_handler(CommandHandler("stats",stats))
-    app.add_handler(CommandHandler("history",history))
-    app.add_handler(CommandHandler("premium",premium))
-    app.add_handler(CommandHandler("promo",promo))
-    app.add_handler(CommandHandler("support",support))
-    app.add_handler(CommandHandler("findmatch",find))
-    app.add_handler(CommandHandler("admin",admin))
-    app.add_handler(CommandHandler("party",party))
-    
-    app.add_handler(ConversationHandler([CommandHandler("register",reg_start)],[REG_NICK:[MessageHandler(filters.TEXT&~filters.COMMAND,reg_nick)],REG_GAMEID:[MessageHandler(filters.TEXT&~filters.COMMAND,reg_gameid)]},[CommandHandler("cancel",cancel)]))
-    app.add_handler(ConversationHandler([CommandHandler("support",support),MessageHandler(filters.Regex("^🆘 Поддержка$"),support)],[SUPPORT_MSG:[MessageHandler(filters.TEXT&~filters.COMMAND,support_send)]},[CommandHandler("cancel",cancel)]))
-    app.add_handler(ConversationHandler([CommandHandler("changenick",change_nick),MessageHandler(filters.Regex("^✏️ Сменить ник$"),change_nick)],[CHANGE_NICK_NEW:[MessageHandler(filters.TEXT&~filters.COMMAND,change_apply)]},[CommandHandler("cancel",cancel)]))
-    app.add_handler(ConversationHandler([CommandHandler("promo",promo),MessageHandler(filters.Regex("^🎟 Промокод$"),promo)],[PROMO_INPUT:[MessageHandler(filters.TEXT&~filters.COMMAND,promo_apply)]},[CommandHandler("cancel",cancel)]))
-    app.add_handler(ConversationHandler([CommandHandler("party",party),MessageHandler(filters.Regex("^👥 Пати$"),party)],[PARTY_INVITE:[MessageHandler(filters.TEXT&~filters.COMMAND,party_invite_send)]},[CommandHandler("cancel",cancel)]))
-    app.add_handler(ConversationHandler([CallbackQueryHandler(admin_cb,pattern="^admin_")],[ADMIN_GIVEELO_TARGET:[MessageHandler(filters.TEXT&~filters.COMMAND,admin_giveelo_target)],ADMIN_GIVEELO_AMOUNT:[MessageHandler(filters.TEXT&~filters.COMMAND,admin_giveelo_amount)],ADMIN_BAN_TARGET:[MessageHandler(filters.TEXT&~filters.COMMAND,admin_ban_target)],ADMIN_UNBAN_TARGET:[MessageHandler(filters.TEXT&~filters.COMMAND,admin_unban_target)],ADMIN_SETNICK_TARGET:[MessageHandler(filters.TEXT&~filters.COMMAND,admin_setnick_target)],ADMIN_SETNICK_NEW:[MessageHandler(filters.TEXT&~filters.COMMAND,admin_setnick_apply)],ADMIN_SETGAMEID_TARGET:[MessageHandler(filters.TEXT&~filters.COMMAND,admin_setgameid_target)],ADMIN_SETGAMEID_NEW:[MessageHandler(filters.TEXT&~filters.COMMAND,admin_setgameid_apply)],ADMIN_PROMO_DAYS:[MessageHandler(filters.TEXT&~filters.COMMAND,admin_createpromo)]},[CommandHandler("cancel",cancel)]))
-    app.add_handler(ConversationHandler([CallbackQueryHandler(reject,pattern="^reject_")],[ADMIN_REJECT_ELO:[MessageHandler(filters.TEXT&~filters.COMMAND,reject_elo)]},[CommandHandler("cancel",cancel)]))
-    
-    app.add_handler(CallbackQueryHandler(back,pattern="^back$"))
-    app.add_handler(CallbackQueryHandler(prem_cb,pattern="^premium_"))
-    app.add_handler(CallbackQueryHandler(plat_cb,pattern="^platform_"))
-    app.add_handler(CallbackQueryHandler(ready,pattern="^ready_"))
-    app.add_handler(CallbackQueryHandler(cancel_search,pattern="^cancel_"))
-    app.add_handler(CallbackQueryHandler(veto,pattern="^veto_"))
-    app.add_handler(CallbackQueryHandler(sr_cb,pattern="^sr_"))
-    app.add_handler(CallbackQueryHandler(confirm,pattern="^confirm_"))
-    app.add_handler(CallbackQueryHandler(reject,pattern="^reject_"))
-    app.add_handler(CallbackQueryHandler(paccept,pattern="^paccept_"))
-    app.add_handler(CallbackQueryHandler(pdecline,pattern="^pdecline_"))
-    app.add_handler(CallbackQueryHandler(party_leave,pattern="^party_leave$"))
-    app.add_handler(CallbackQueryHandler(party_invite,pattern="^party_invite$"))
-    
-    app.add_handler(PreCheckoutQueryHandler(lambda u,c: u.pre_checkout_query.answer(ok=True)))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT,lambda u,c: dbup(u.effective_user.id,{"premium_until":(datetime.now(timezone.utc)+timedelta(days=30)).isoformat()}) or u.message.reply_text("✅ Премиум активирован!")))
-    app.add_handler(MessageHandler(filters.PHOTO,photo))
-    
-    if ADMIN_CHAT_ID:
-        app.add_handler(MessageHandler(filters.TEXT&filters.Chat(chat_id=ADMIN_CHAT_ID)&~filters.COMMAND,admin_chat))
-    
-    app.add_handler(MessageHandler(filters.TEXT&~filters.COMMAND,lambda u,c: globals().get({"🔍 Найти матч":find,"👤 Профиль":profile,"🏆 Топ игроков":top,"📊 Статистика":stats,"📝 История":history,"💎 Премиум":premium,"🎟 Промокод":promo,"🆘 Поддержка":support,"✏️ Сменить ник":change_nick,"👥 Пати":party,"⚙️ Админ-панель":admin}.get(u.message.text,lambda:None)) and globals().get({"🔍 Найти матч":find,"👤 Профиль":profile,"🏆 Топ игроков":top,"📊 Статистика":stats,"📝 История":history,"💎 Премиум":premium,"🎟 Промокод":promo,"🆘 Поддержка":support,"✏️ Сменить ник":change_nick,"👥 Пати":party,"⚙️ Админ-панель":admin}.get(u.message.text,lambda:None))(u,c)))
-    
-    app.add_error_handler(error)
-    logger.info("🤖 Bot started, polling...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES,drop_pending_updates=True)
+    app.post_init = post_init
 
-if __name__=="__main__":
+app.add_handler(ConversationHandler([CommandHandler("register", reg_start)], [REG_NICK: [MessageHandler(filters.TEXT & ~filters.COMMAND, reg_nick)], REG_GAMEID: [MessageHandler(filters.TEXT & ~filters.COMMAND, reg_gameid)]], [CommandHandler("cancel", cancel)]))
+
+app.add_handler(ConversationHandler([CommandHandler("support", support), MessageHandler(filters.Regex("^🆘 Поддержка$"), support)], [SUPPORT_MSG: [MessageHandler(filters.TEXT & ~filters.COMMAND, support_send)]], [CommandHandler("cancel", cancel)]))
+
+app.add_handler(ConversationHandler([CommandHandler("changenick", change_nick), MessageHandler(filters.Regex("^✏️ Сменить ник$"), change_nick)], [CHANGE_NICK_NEW: [MessageHandler(filters.TEXT & ~filters.COMMAND, change_apply)]], [CommandHandler("cancel", cancel)]))
+
+app.add_handler(ConversationHandler([CommandHandler("promo", promo), MessageHandler(filters.Regex("^🎟 Промокод$"), promo)], [PROMO_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, promo_apply)]], [CommandHandler("cancel", cancel)]))
+
+app.add_handler(ConversationHandler([CommandHandler("party", party), MessageHandler(filters.Regex("^👥 Пати$"), party)], [PARTY_INVITE: [MessageHandler(filters.TEXT & ~filters.COMMAND, party_invite_send)]], [CommandHandler("cancel", cancel)]))
+
+app.add_handler(ConversationHandler([CallbackQueryHandler(admin_cb, pattern="^admin_")], [ADMIN_GIVEELO_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_giveelo_target)], ADMIN_GIVEELO_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_giveelo_amount)], ADMIN_BAN_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_ban_target)], ADMIN_UNBAN_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_unban_target)], ADMIN_SETNICK_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_setnick_target)], ADMIN_SETNICK_NEW: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_setnick_apply)], ADMIN_SETGAMEID_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_setgameid_target)], ADMIN_SETGAMEID_NEW: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_setgameid_apply)], ADMIN_PROMO_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_createpromo)]], [CommandHandler("cancel", cancel)]))
+
+app.add_handler(ConversationHandler([CallbackQueryHandler(reject, pattern="^reject_")], [ADMIN_REJECT_ELO: [MessageHandler(filters.TEXT & ~filters.COMMAND, reject_elo)]], [CommandHandler("cancel", cancel)]))
+
+app.add_handler(CallbackQueryHandler(back, pattern="^back$"))
+app.add_handler(CallbackQueryHandler(prem_cb, pattern="^premium_"))
+app.add_handler(CallbackQueryHandler(plat_cb, pattern="^platform_"))
+app.add_handler(CallbackQueryHandler(ready, pattern="^ready_"))
+app.add_handler(CallbackQueryHandler(cancel_search, pattern="^cancel_"))
+app.add_handler(CallbackQueryHandler(veto, pattern="^veto_"))
+app.add_handler(CallbackQueryHandler(sr_cb, pattern="^sr_"))
+app.add_handler(CallbackQueryHandler(confirm, pattern="^confirm_"))
+app.add_handler(CallbackQueryHandler(reject, pattern="^reject_"))
+app.add_handler(CallbackQueryHandler(paccept, pattern="^paccept_"))
+app.add_handler(CallbackQueryHandler(pdecline, pattern="^pdecline_"))
+app.add_handler(CallbackQueryHandler(party_leave, pattern="^party_leave$"))
+app.add_handler(CallbackQueryHandler(party_invite, pattern="^party_invite$"))
+
+app.add_handler(PreCheckoutQueryHandler(lambda u, c: u.pre_checkout_query.answer(ok=True)))
+app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, lambda u, c: dbup(u.effective_user.id, {"premium_until": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()}) or u.message.reply_text("✅ Премиум активирован!")))
+app.add_handler(MessageHandler(filters.PHOTO, photo))
+
+if ADMIN_CHAT_ID:
+    app.add_handler(MessageHandler(filters.TEXT & filters.Chat(chat_id=ADMIN_CHAT_ID) & ~filters.COMMAND, admin_chat))
+
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: globals().get({"🔍 Найти матч": find, "👤 Профиль": profile, "🏆 Топ игроков": top, "📊 Статистика": stats, "📝 История": history, "💎 Премиум": premium, "🎟 Промокод": promo, "🆘 Поддержка": support, "✏️ Сменить ник": change_nick, "👥 Пати": party, "⚙️ Админ-панель": admin}.get(u.message.text, lambda: None)) and globals().get({"🔍 Найти матч": find, "👤 Профиль": profile, "🏆 Топ игроков": top, "📊 Статистика": stats, "📝 История": history, "💎 Премиум": premium, "🎟 Промокод": promo, "🆘 Поддержка": support, "✏️ Сменить ник": change_nick, "👥 Пати": party, "⚙️ Админ-панель": admin}.get(u.message.text, lambda: None))(u, c)))
+
+app.add_error_handler(error)
+logger.info("🤖 Bot started, polling...")
+app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+
+if __name__ == "__main__":
     main()
