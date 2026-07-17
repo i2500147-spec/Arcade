@@ -69,14 +69,14 @@ def get_level(mmr):
     elif mmr < 2500: return 9
     else: return 10
 
-# ---------- ЛОББИ (ВРЕМЕННОЕ ХРАНИЛИЩЕ) ----------
+# ---------- ЛОББИ ----------
 lobbies = {}
 
 # ---------- БОТ ----------
 @dp.message(Command("start"))
 async def start(msg: types.Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚀 ОТКРЫТЬ ПЛАТФОРМУ", web_app=WebAppInfo(url="https://YOUR_RENDER_URL"))]
+        [InlineKeyboardButton(text="🚀 ОТКРЫТЬ ПЛАТФОРМУ", web_app=WebAppInfo(url="https://arcade-1-ehzf.onrender.com"))]
     ])
     await msg.answer("👋 Добро пожаловать в Stranger Faceit!", reply_markup=kb)
 
@@ -261,17 +261,17 @@ async def webhook(req: Request):
     return {"status": "ok"}
 
 # ---------- ЗАПУСК ----------
-def run_bot():
-    asyncio.run(dp.start_polling(bot))
-
 def run_web():
     uvicorn.run(app, host="0.0.0.0", port=8080)
 
+async def run_bot():
+    await dp.start_polling(bot)
+
 if __name__ == "__main__":
-    # Запускаем бота в отдельном потоке
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
+    # Запускаем веб-сервер в отдельном потоке (он не использует сигналы)
+    web_thread = threading.Thread(target=run_web)
+    web_thread.daemon = True
+    web_thread.start()
     
-    # Запускаем веб-сервер в основном потоке
-    run_web()
+    # Бота запускаем в основном потоке (чтобы сигналы работали)
+    asyncio.run(run_bot())
