@@ -2,177 +2,57 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Stranger Faceit</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: #0D0D0D;
-            color: #FFFFFF;
+            color: #E0E0E0;
             font-family: -apple-system, sans-serif;
-            padding: 16px;
+            padding: 12px 16px 90px 16px;
             min-height: 100vh;
         }
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px 0 20px 0;
+            padding: 12px 0 16px 0;
             border-bottom: 1px solid #2A2A2A;
         }
-        .logo {
-            font-weight: 700;
-            font-size: 20px;
-            color: #FF6B00;
-            letter-spacing: 1px;
-        }
+        .logo { font-weight: 600; font-size: 18px; color: #FFFFFF; letter-spacing: 0.5px; }
         .avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: #2A2A2A;
-            border: 2px solid #FF6B00;
+            width: 36px; height: 36px; border-radius: 50%;
+            background: #2A2A2A; border: 1.5px solid #555;
             cursor: pointer;
-        }
-        .menu {
-            display: flex;
-            justify-content: space-around;
-            padding: 16px 0;
-            border-top: 1px solid #2A2A2A;
-            margin-top: 20px;
-        }
-        .menu-item {
-            text-align: center;
-            color: #9A9A9A;
-            font-size: 12px;
-            cursor: pointer;
-        }
-        .menu-item.active {
-            color: #FF6B00;
         }
         .card {
             background: #1A1A1A;
-            border-radius: 24px;
-            padding: 20px;
-            margin: 16px 0;
+            border-radius: 16px;
+            padding: 16px;
+            margin: 12px 0;
             border: 1px solid #2A2A2A;
         }
         .btn {
-            background: #FF6B00;
+            background: #2A2A2A;
             color: #FFFFFF;
             border: none;
-            padding: 14px;
-            border-radius: 16px;
-            font-size: 16px;
-            font-weight: 600;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 500;
             width: 100%;
-            margin: 8px 0;
+            margin: 6px 0;
             cursor: pointer;
         }
-        .btn-secondary {
-            background: #2A2A2A;
-            color: #FFFFFF;
-        }
-        .flex {
-            display: flex;
-            gap: 12px;
-        }
-        .flex .btn {
-            flex: 1;
-        }
-        .hidden {
-            display: none;
-        }
-        .text-muted {
-            color: #9A9A9A;
-            font-size: 14px;
-        }
-        .text-orange {
-            color: #FF6B00;
-        }
-        .text-green {
-            color: #00FF00;
-        }
-        .text-red {
-            color: #FF4444;
-        }
-        .map-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            margin: 12px 0;
-        }
-        .map-btn {
-            background: #2A2A2A;
-            border: 1px solid #3A3A3A;
-            border-radius: 12px;
-            padding: 12px;
-            text-align: center;
-            color: #FFFFFF;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .map-btn.banned {
-            border-color: #FF4444;
-            opacity: 0.4;
-            text-decoration: line-through;
-        }
-        .map-btn.selected {
-            border-color: #FF6B00;
-            background: #2A1A0A;
-        }
-        .player-list {
-            list-style: none;
-            padding: 0;
-        }
-        .player-list li {
-            padding: 8px 0;
-            border-bottom: 1px solid #1A1A1A;
-            display: flex;
-            justify-content: space-between;
-        }
-        .ready-status {
-            font-weight: 600;
-        }
-        .ready-true {
-            color: #00FF00;
-        }
-        .ready-false {
-            color: #FF4444;
-        }
-        .host-id-box {
-            background: #0D0D0D;
-            padding: 12px;
-            border-radius: 12px;
-            border: 1px solid #FF6B00;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 8px 0;
-        }
-        .host-id-box span {
-            font-size: 18px;
-            font-weight: 600;
-            color: #FF6B00;
-            letter-spacing: 1px;
-        }
-        .copy-btn {
-            background: #2A2A2A;
-            border: none;
-            color: #FFFFFF;
-            padding: 6px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        .copy-btn:hover {
-            background: #3A3A3A;
-        }
+        .btn-primary { background: #FFFFFF; color: #0D0D0D; font-weight: 600; }
+        .btn-secondary { background: #2A2A2A; color: #E0E0E0; }
+        .flex { display: flex; gap: 10px; }
+        .flex .btn { flex: 1; }
+        .hidden { display: none !important; }
+        .text-muted { color: #888; font-size: 13px; }
+        .text-orange { color: #FFFFFF; }
         .input-field {
             width: 100%;
             padding: 12px;
@@ -180,75 +60,100 @@
             border: 1px solid #2A2A2A;
             border-radius: 12px;
             color: #FFFFFF;
-            font-size: 16px;
-            margin: 8px 0;
+            font-size: 15px;
+            margin: 6px 0;
         }
-        .input-field:focus {
-            outline: none;
-            border-color: #FF6B00;
+        .input-field:focus { outline: none; border-color: #555; }
+        .tab-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            border-top: 1px solid #2A2A2A;
+            background: #0D0D0D;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
         }
-        .top-list {
-            list-style: none;
-            padding: 0;
+        .tab-item {
+            text-align: center;
+            color: #666;
+            font-size: 11px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 4px 6px;
         }
+        .tab-item.active { color: #FFFFFF; }
+        .tab-icon { font-size: 20px; display: block; }
+        .tab-label { display: block; margin-top: 2px; }
+        .top-list { list-style: none; padding: 0; }
         .top-list li {
             padding: 8px 0;
             border-bottom: 1px solid #1A1A1A;
             display: flex;
             justify-content: space-between;
         }
-        .top-rank {
-            font-weight: 700;
-            color: #FF6B00;
-            width: 30px;
+        .top-rank { font-weight: 600; color: #888; width: 30px; }
+        .top-name { flex: 1; margin-left: 8px; }
+        .top-elo { color: #888; font-size: 13px; }
+        .player-list { list-style: none; padding: 0; }
+        .player-list li {
+            padding: 6px 0;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #111;
         }
-        .top-name {
-            flex: 1;
-            margin-left: 10px;
+        .ready-true { color: #4CAF50; }
+        .ready-false { color: #F44336; }
+        .host-id-box {
+            background: #0D0D0D;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 8px 0;
         }
-        .top-elo {
-            color: #9A9A9A;
+        .host-id-box span { font-size: 18px; font-weight: 600; color: #FFFFFF; letter-spacing: 0.5px; }
+        .copy-btn {
+            background: #2A2A2A;
+            border: none;
+            color: #FFFFFF;
+            padding: 4px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
         }
-        .promo-list {
-            margin-top: 10px;
+        .map-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin: 10px 0;
         }
+        .map-btn {
+            background: #1A1A1A;
+            border: 1px solid #2A2A2A;
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center;
+            color: #E0E0E0;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .map-btn.banned { border-color: #F44336; opacity: 0.4; text-decoration: line-through; }
+        .map-btn.selected { border-color: #FFFFFF; background: #2A2A2A; }
+        .promo-list { margin-top: 8px; }
         .promo-item {
             background: #0D0D0D;
-            padding: 10px;
-            border-radius: 12px;
-            margin: 6px 0;
-            border-left: 3px solid #FF6B00;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin: 4px 0;
+            border-left: 2px solid #555;
         }
-        .tab-bar {
-            display: flex;
-            justify-content: space-around;
-            padding: 16px 0;
-            border-top: 1px solid #2A2A2A;
-            margin-top: 20px;
-            background: #0D0D0D;
-            position: sticky;
-            bottom: 0;
-        }
-        .tab-item {
-            text-align: center;
-            color: #9A9A9A;
-            font-size: 12px;
-            cursor: pointer;
-            background: none;
-            border: none;
-            padding: 4px 8px;
-        }
-        .tab-item.active {
-            color: #FF6B00;
-        }
-        .tab-icon {
-            font-size: 22px;
-            display: block;
-        }
-        .tab-label {
-            display: block;
-            margin-top: 2px;
-        }
+        .search-box { max-width: 300px; margin: 0 auto; }
     </style>
 </head>
 <body>
@@ -262,10 +167,10 @@
         <!-- SCREEN: START -->
         <div id="screen-start" class="screen">
             <div class="card" style="text-align: center; padding: 40px 20px;">
-                <h1 style="font-size: 28px; margin-bottom: 8px;">ДОБРО ПОЖАЛОВАТЬ</h1>
+                <h1 style="font-size: 26px; margin-bottom: 8px;">ДОБРО ПОЖАЛОВАТЬ</h1>
                 <p class="text-muted" style="margin-bottom: 20px;">Войди или зарегистрируйся</p>
                 <div class="flex">
-                    <button class="btn" onclick="showLogin()">ВОЙТИ</button>
+                    <button class="btn btn-primary" onclick="showLogin()">ВОЙТИ</button>
                     <button class="btn btn-secondary" onclick="showRegister()">РЕГИСТР</button>
                 </div>
             </div>
@@ -274,10 +179,10 @@
         <!-- SCREEN: LOGIN -->
         <div id="screen-login" class="screen hidden">
             <div class="card">
-                <h2 style="margin-bottom: 16px;">ВХОД</h2>
+                <h2 style="margin-bottom: 12px;">ВХОД</h2>
                 <input class="input-field" id="loginNick" placeholder="Ник в Standoff 2">
                 <input class="input-field" id="loginPassword" type="password" placeholder="Пароль">
-                <button class="btn" onclick="loginUser()">ВОЙТИ</button>
+                <button class="btn btn-primary" onclick="loginUser()">ВОЙТИ</button>
                 <button class="btn btn-secondary" onclick="showStart()">НАЗАД</button>
             </div>
         </div>
@@ -285,11 +190,11 @@
         <!-- SCREEN: REGISTER -->
         <div id="screen-register" class="screen hidden">
             <div class="card">
-                <h2 style="margin-bottom: 16px;">РЕГИСТРАЦИЯ</h2>
+                <h2 style="margin-bottom: 12px;">РЕГИСТРАЦИЯ</h2>
                 <input class="input-field" id="regNick" placeholder="Ник в Standoff 2">
-                <input class="input-field" id="regStandoffId" placeholder="Твой ID в Standoff 2">
+                <input class="input-field" id="regStandoffId" placeholder="Твой ID в Standoff 2 (только цифры)">
                 <input class="input-field" id="regPassword" type="password" placeholder="Пароль (мин. 6 символов)">
-                <button class="btn" onclick="registerUser()">ЗАРЕГИСТРИРОВАТЬСЯ</button>
+                <button class="btn btn-primary" onclick="registerUser()">ЗАРЕГИСТРИРОВАТЬСЯ</button>
                 <button class="btn btn-secondary" onclick="showStart()">НАЗАД</button>
             </div>
         </div>
@@ -303,11 +208,11 @@
                     <p class="text-muted" id="mainStats">Матчей: 0 | Побед: 0</p>
                     <p class="text-muted" id="mainCalibration" style="color: #FF6B00;">Калибровка: 0/10</p>
                 </div>
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #2A2A2A;">
-                    <p class="text-muted" style="font-size: 13px;">ПОСЛЕДНИЙ МАТЧ</p>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #2A2A2A;">
+                    <p class="text-muted" style="font-size: 12px;">ПОСЛЕДНИЙ МАТЧ</p>
                     <p id="mainLastMatch" class="text-muted" style="font-size: 13px;">Нет данных</p>
                 </div>
-                <button class="btn" onclick="findMatch()" style="margin-top: 12px;">НАЙТИ МАТЧ</button>
+                <button class="btn btn-primary" onclick="findMatch()" style="margin-top: 12px;">НАЙТИ МАТЧ</button>
                 <button class="btn btn-secondary" onclick="showTournaments()">ТУРНИРЫ</button>
             </div>
         </div>
@@ -320,33 +225,33 @@
                 <p class="text-muted" id="profileLevel">Уровень: 1 | Эло: 1000</p>
                 <p class="text-muted" id="profileStats">Матчей: 0 | Побед: 0 | K/D: 0.00</p>
                 <p class="text-muted">На платформе: <span id="profileDays">0</span> дней</p>
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #2A2A2A;">
-                    <p class="text-muted" style="font-size: 13px;">ПОСЛЕДНИЙ МАТЧ</p>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #2A2A2A;">
+                    <p class="text-muted" style="font-size: 12px;">ПОСЛЕДНИЙ МАТЧ</p>
                     <p id="profileLastMatch" class="text-muted" style="font-size: 13px;">Нет данных</p>
                 </div>
-                <div style="margin-top: 16px;">
-                    <h3 style="font-size: 16px;">ПРОМОКОДЫ</h3>
+                <div style="margin-top: 12px;">
+                    <h3 style="font-size: 15px;">ПРОМОКОДЫ</h3>
                     <input class="input-field" id="promoInput" placeholder="Введи промокод">
-                    <button class="btn" onclick="activatePromo()">АКТИВИРОВАТЬ</button>
+                    <button class="btn btn-secondary" onclick="activatePromo()">АКТИВИРОВАТЬ</button>
                     <div id="promoList" class="promo-list">
-                        <p class="text-muted" style="font-size: 13px;">Нет активных промокодов</p>
+                        <p class="text-muted" style="font-size: 12px;">Нет активных промокодов</p>
                     </div>
                 </div>
-                <button class="btn btn-secondary" onclick="changePassword()" style="margin-top: 12px;">СМЕНИТЬ ПАРОЛЬ</button>
+                <button class="btn btn-secondary" onclick="changePassword()" style="margin-top: 8px;">СМЕНИТЬ ПАРОЛЬ</button>
                 <button class="btn btn-secondary" onclick="openSupport()">ПОДДЕРЖКА</button>
                 <button class="btn btn-secondary" onclick="closeProfile()">НАЗАД</button>
             </div>
         </div>
 
-        <!-- SCREEN: FIND MATCH -->
+        <!-- SCREEN: FIND -->
         <div id="screen-find" class="screen hidden">
             <div class="card">
-                <h3 style="margin-bottom: 12px;">ВЫБЕРИ ПЛАТФОРМУ</h3>
+                <h3 style="margin-bottom: 10px;">ВЫБЕРИ ПЛАТФОРМУ</h3>
                 <div class="flex">
-                    <button class="btn" onclick="selectPlatform('PC')">PC</button>
+                    <button class="btn btn-primary" onclick="selectPlatform('PC')">PC</button>
                     <button class="btn btn-secondary" onclick="selectPlatform('MOBILE')">MOBILE</button>
                 </div>
-                <div id="lobbyList" style="margin-top: 12px;">
+                <div id="lobbyList" style="margin-top: 10px;">
                     <p class="text-muted">Выбери платформу, чтобы увидеть лобби</p>
                 </div>
                 <button class="btn btn-secondary" onclick="showMain()">НАЗАД</button>
@@ -360,22 +265,22 @@
                 <ul class="player-list" id="lobbyPlayers">
                     <li>Нет игроков</li>
                 </ul>
-                <div style="margin-top: 12px;">
-                    <button class="btn" onclick="setReady()" id="readyBtn">Я ГОТОВ</button>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-primary" onclick="setReady()" id="readyBtn">Я ГОТОВ</button>
                     <button class="btn btn-secondary" onclick="leaveLobby()">ВЫЙТИ</button>
                 </div>
-                <div id="lobbyHostInfo" class="hidden" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #2A2A2A;">
+                <div id="lobbyHostInfo" class="hidden" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #2A2A2A;">
                     <div class="host-id-box">
-                        <span id="hostIdDisplay">100763712</span>
+                        <span id="hostIdDisplay">123456</span>
                         <button class="copy-btn" onclick="copyHostId()">📋 КОПИРОВАТЬ</button>
                     </div>
-                    <p class="text-muted" style="font-size: 13px;">Хост: <span id="hostName">@host</span></p>
-                    <p class="text-muted" style="font-size: 13px;">Карта: <span id="lobbyMap">SANDSTONE</span></p>
+                    <p class="text-muted" style="font-size: 12px;">Хост: <span id="hostName">@host</span></p>
+                    <p class="text-muted" style="font-size: 12px;">Карта: <span id="lobbyMap">SANDSTONE</span></p>
                 </div>
-                <div id="banPickArea" class="hidden" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #2A2A2A;">
-                    <p class="text-muted" style="font-size: 13px;" id="banTurnInfo">Очередь: @player (1/6)</p>
+                <div id="banPickArea" class="hidden" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #2A2A2A;">
+                    <p class="text-muted" style="font-size: 12px;" id="banTurnInfo">Очередь: @player (1/6)</p>
                     <div class="map-grid" id="mapGrid"></div>
-                    <button class="btn" id="banBtn" onclick="banMap()">ЗАБАНИТЬ КАРТУ</button>
+                    <button class="btn btn-secondary" id="banBtn" onclick="banMap()">ЗАБАНИТЬ КАРТУ</button>
                 </div>
             </div>
         </div>
@@ -383,8 +288,10 @@
         <!-- SCREEN: TOP -->
         <div id="screen-top" class="screen hidden">
             <div class="card">
-                <h3 style="margin-bottom: 12px;">ТОП-100</h3>
-                <input class="input-field" id="topSearch" placeholder="Поиск по нику" oninput="searchTop()">
+                <h3 style="margin-bottom: 10px;">ТОП-100</h3>
+                <div class="search-box">
+                    <input class="input-field" id="topSearch" placeholder="Поиск по нику" oninput="searchTop()">
+                </div>
                 <ul class="top-list" id="topList">
                     <li>Загрузка...</li>
                 </ul>
@@ -395,7 +302,7 @@
         <!-- SCREEN: HISTORY -->
         <div id="screen-history" class="screen hidden">
             <div class="card">
-                <h3 style="margin-bottom: 12px;">ИСТОРИЯ МАТЧЕЙ</h3>
+                <h3 style="margin-bottom: 10px;">ИСТОРИЯ МАТЧЕЙ</h3>
                 <ul class="top-list" id="historyList">
                     <li>Нет данных</li>
                 </ul>
@@ -406,14 +313,14 @@
         <!-- SCREEN: SUPPORT -->
         <div id="screen-support" class="screen hidden">
             <div class="card">
-                <h3 style="margin-bottom: 12px;">ПОДДЕРЖКА</h3>
+                <h3 style="margin-bottom: 10px;">ПОДДЕРЖКА</h3>
                 <textarea class="input-field" id="supportText" rows="4" placeholder="Опиши проблему..."></textarea>
-                <button class="btn" onclick="sendSupport()">ОТПРАВИТЬ</button>
+                <button class="btn btn-primary" onclick="sendSupport()">ОТПРАВИТЬ</button>
                 <button class="btn btn-secondary" onclick="closeSupport()">НАЗАД</button>
             </div>
         </div>
 
-        <!-- SCREEN: TOURNAMENTS (заглушка) -->
+        <!-- SCREEN: TOURNAMENTS -->
         <div id="screen-tournaments" class="screen hidden">
             <div class="card" style="text-align: center; padding: 40px 20px;">
                 <h2>🎲 ТУРНИРЫ</h2>
@@ -440,120 +347,155 @@
                 <span class="tab-icon">📋</span>
                 <span class="tab-label">История</span>
             </button>
-            <button class="tab-item" data-tab="promo" onclick="switchTab('promo')">
-                <span class="tab-icon">🎁</span>
-                <span class="tab-label">Промо</span>
+            <button class="tab-item" data-tab="profile" onclick="switchTab('profile')">
+                <span class="tab-icon">👤</span>
+                <span class="tab-label">Профиль</span>
             </button>
         </div>
     </div>
 
     <script>
         let tg = window.Telegram.WebApp;
-        let currentScreen = 'start';
         let currentUser = null;
+        let currentScreen = 'start';
+        let currentLobby = null;
 
-        // Инициализация
         tg.ready();
         tg.expand();
 
-        // Показать экран
+        // ---------- ПОЛУЧЕНИЕ ID ПОЛЬЗОВАТЕЛЯ ----------
+        function getTelegramId() {
+            try {
+                return tg.initDataUnsafe.user.id;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // ---------- ОТПРАВКА ДАННЫХ БОТУ ----------
+        function sendToBot(data) {
+            data.telegram_id = getTelegramId();
+            tg.sendData(JSON.stringify(data));
+        }
+
+        // ---------- ПОКАЗ ЭКРАНА ----------
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
-            document.getElementById('screen-' + screenId).classList.remove('hidden');
+            const el = document.getElementById('screen-' + screenId);
+            if (el) el.classList.remove('hidden');
             currentScreen = screenId;
         }
 
-        // Навигация
-        function showStart() { showScreen('start'); }
+        function showStart() {
+            showScreen('start');
+            updateTab('start');
+        }
         function showLogin() { showScreen('login'); }
         function showRegister() { showScreen('register'); }
-        function showMain() { showScreen('main'); updateMain(); }
-        function showProfile() { showScreen('profile'); updateProfile(); }
-        function showFind() { showScreen('find'); }
-        function showTop() { showScreen('top'); loadTop(); }
-        function showHistory() { showScreen('history'); loadHistory(); }
-        function showTournaments() { showScreen('tournaments'); }
-        function openSupport() { showScreen('support'); }
+        function showMain() {
+            if (!currentUser) { showStart(); return; }
+            showScreen('main');
+            updateTab('main');
+            updateMain();
+        }
+        function showProfile() {
+            if (!currentUser) { showStart(); return; }
+            showScreen('profile');
+            updateTab('profile');
+            updateProfile();
+        }
+        function showFind() {
+            if (!currentUser) { showStart(); return; }
+            showScreen('find');
+            updateTab('find');
+        }
+        function showTop() {
+            if (!currentUser) { showStart(); return; }
+            showScreen('top');
+            updateTab('top');
+            loadTop();
+        }
+        function showHistory() {
+            if (!currentUser) { showStart(); return; }
+            showScreen('history');
+            updateTab('history');
+            loadHistory();
+        }
+        function showTournaments() {
+            if (!currentUser) { showStart(); return; }
+            showScreen('tournaments');
+        }
+        function openSupport() {
+            if (!currentUser) { showStart(); return; }
+            showScreen('support');
+        }
         function closeSupport() { showMain(); }
+        function closeProfile() { showMain(); }
+        function openProfile() {
+            if (currentUser) showProfile();
+            else showStart();
+        }
 
-        // Переключение табов
-        function switchTab(tab) {
+        // ---------- ТАБЫ ----------
+        function updateTab(tab) {
             document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
-            document.querySelector(`.tab-item[data-tab="${tab}"]`).classList.add('active');
+            const btn = document.querySelector(`.tab-item[data-tab="${tab}"]`);
+            if (btn) btn.classList.add('active');
+        }
+
+        function switchTab(tab) {
+            if (!currentUser) { showStart(); return; }
             if (tab === 'main') showMain();
             else if (tab === 'find') showFind();
             else if (tab === 'top') showTop();
             else if (tab === 'history') showHistory();
-            else if (tab === 'promo') { if (currentUser) showProfile(); else showStart(); }
+            else if (tab === 'profile') showProfile();
         }
 
-        // ========== АВАТАРКА ==========
-        function openProfile() {
-            if (currentUser) {
-                showProfile();
-            } else {
-                showStart();
-            }
-        }
-
-        function closeProfile() {
-            showMain();
-        }
-
-        // ========== РЕГИСТРАЦИЯ ==========
+        // ---------- РЕГИСТРАЦИЯ / ВХОД ----------
         function registerUser() {
             let nick = document.getElementById('regNick').value.trim();
-            let standoffId = document.getElementById('regStandoffId').value.trim();
-            let password = document.getElementById('regPassword').value.trim();
-            if (!nick || !standoffId || password.length < 6) {
-                tg.showPopup({ title: 'Ошибка', message: 'Заполни все поля. Пароль минимум 6 символов.', buttons: [{ type: 'ok' }] });
+            let sid = document.getElementById('regStandoffId').value.trim();
+            let pwd = document.getElementById('regPassword').value.trim();
+            if (!nick || !sid || pwd.length < 6) {
+                tg.showPopup({ title: 'Ошибка', message: 'Заполни все поля. Пароль минимум 6 символов. ID только цифры.', buttons: [{ type: 'ok' }] });
                 return;
             }
-            tg.sendData(JSON.stringify({
-                action: 'register',
-                nick: nick,
-                standoff_id: standoffId,
-                password: password
-            }));
+            if (!/^\d+$/.test(sid)) {
+                tg.showPopup({ title: 'Ошибка', message: 'ID должен состоять только из цифр.', buttons: [{ type: 'ok' }] });
+                return;
+            }
+            sendToBot({ action: 'register', nick, standoff_id: sid, password: pwd });
         }
 
-        // ========== ВХОД ==========
         function loginUser() {
             let nick = document.getElementById('loginNick').value.trim();
-            let password = document.getElementById('loginPassword').value.trim();
-            if (!nick || !password) {
+            let pwd = document.getElementById('loginPassword').value.trim();
+            if (!nick || !pwd) {
                 tg.showPopup({ title: 'Ошибка', message: 'Заполни все поля.', buttons: [{ type: 'ok' }] });
                 return;
             }
-            tg.sendData(JSON.stringify({
-                action: 'login',
-                nick: nick,
-                password: password
-            }));
+            sendToBot({ action: 'login', nick, password: pwd });
         }
 
-        // ========== ОБНОВЛЕНИЕ ГЛАВНОЙ ==========
+        // ---------- ОБНОВЛЕНИЕ ГЛАВНОЙ ----------
         function updateMain() {
             if (!currentUser) return;
             document.getElementById('mainUsername').textContent = '@' + (currentUser.username || 'user');
-            document.getElementById('mainLevel').textContent = 'Уровень: ' + (currentUser.level || 1) + ' | Эло: ' + (currentUser
-                .elo || 1000);
-            document.getElementById('mainStats').textContent = 'Матчей: ' + (currentUser.matches || 0) + ' | Побед: ' + (currentUser
-                .wins || 0);
+            document.getElementById('mainLevel').textContent = 'Уровень: ' + (currentUser.level || 1) + ' | Эло: ' + (currentUser.elo || 1000);
+            document.getElementById('mainStats').textContent = 'Матчей: ' + (currentUser.matches || 0) + ' | Побед: ' + (currentUser.wins || 0);
             let cal = currentUser.matches || 0;
             document.getElementById('mainCalibration').textContent = cal < 10 ? 'Калибровка: ' + cal + '/10' : 'Калибровка завершена!';
             document.getElementById('mainLastMatch').textContent = currentUser.last_match || 'Нет данных';
         }
 
-        // ========== ОБНОВЛЕНИЕ ПРОФИЛЯ ==========
+        // ---------- ПРОФИЛЬ ----------
         function updateProfile() {
             if (!currentUser) return;
             document.getElementById('profileUsername').textContent = '@' + (currentUser.username || 'user');
-            document.getElementById('profileTelegramId').textContent = tg.initDataUnsafe.user.id || '123456';
-            document.getElementById('profileLevel').textContent = 'Уровень: ' + (currentUser.level || 1) + ' | Эло: ' + (currentUser
-                .elo || 1000);
-            document.getElementById('profileStats').textContent = 'Матчей: ' + (currentUser.matches || 0) + ' | Побед: ' + (
-                currentUser.wins || 0) + ' | K/D: ' + (currentUser.kd || '0.00');
+            document.getElementById('profileTelegramId').textContent = getTelegramId() || '123456';
+            document.getElementById('profileLevel').textContent = 'Уровень: ' + (currentUser.level || 1) + ' | Эло: ' + (currentUser.elo || 1000);
+            document.getElementById('profileStats').textContent = 'Матчей: ' + (currentUser.matches || 0) + ' | Побед: ' + (currentUser.wins || 0) + ' | K/D: ' + (currentUser.kd || '0.00');
             document.getElementById('profileDays').textContent = currentUser.days || 0;
             document.getElementById('profileLastMatch').textContent = currentUser.last_match || 'Нет данных';
             // Промокоды
@@ -563,42 +505,31 @@
                     promoHtml += '<div class="promo-item">' + p.code + ' → +' + p.reward + ' Эло</div>';
                 });
             } else {
-                promoHtml = '<p class="text-muted" style="font-size: 13px;">Нет активных промокодов</p>';
+                promoHtml = '<p class="text-muted" style="font-size: 12px;">Нет активных промокодов</p>';
             }
             document.getElementById('promoList').innerHTML = promoHtml;
         }
 
-        // ========== ПОИСК МАТЧА ==========
+        // ---------- ПОИСК МАТЧА ----------
+        function findMatch() { showFind(); }
+
         function selectPlatform(platform) {
-            tg.sendData(JSON.stringify({
-                action: 'find_match',
-                platform: platform
-            }));
+            sendToBot({ action: 'find_match', platform });
         }
 
-        function findMatch() {
-            showFind();
-        }
-
-        // ========== ЛОББИ ==========
+        // ---------- ЛОББИ ----------
         function setReady() {
-            tg.sendData(JSON.stringify({
-                action: 'set_ready'
-            }));
+            sendToBot({ action: 'set_ready' });
         }
 
         function leaveLobby() {
-            tg.sendData(JSON.stringify({
-                action: 'leave_lobby'
-            }));
+            sendToBot({ action: 'leave_lobby' });
             showMain();
         }
 
-        // ========== БАН-ПИКИ ==========
+        // ---------- БАН-ПИКИ ----------
         function banMap() {
-            tg.sendData(JSON.stringify({
-                action: 'ban_map'
-            }));
+            sendToBot({ action: 'ban_map' });
         }
 
         function copyHostId() {
@@ -608,39 +539,39 @@
             });
         }
 
-        // ========== ТОП ==========
+        // ---------- ТОП ----------
         function loadTop() {
-            tg.sendData(JSON.stringify({ action: 'get_top' }));
+            sendToBot({ action: 'get_top' });
         }
 
         function searchTop() {
             let q = document.getElementById('topSearch').value.trim();
-            tg.sendData(JSON.stringify({ action: 'search_top', query: q }));
+            sendToBot({ action: 'search_top', query: q });
         }
 
-        // ========== ИСТОРИЯ ==========
+        // ---------- ИСТОРИЯ ----------
         function loadHistory() {
-            tg.sendData(JSON.stringify({ action: 'get_history' }));
+            sendToBot({ action: 'get_history' });
         }
 
-        // ========== ПРОМОКОДЫ ==========
+        // ---------- ПРОМО ----------
         function activatePromo() {
             let code = document.getElementById('promoInput').value.trim();
             if (!code) {
                 tg.showPopup({ title: 'Ошибка', message: 'Введи промокод.', buttons: [{ type: 'ok' }] });
                 return;
             }
-            tg.sendData(JSON.stringify({ action: 'activate_promo', code: code }));
+            sendToBot({ action: 'activate_promo', code });
         }
 
-        // ========== ПОДДЕРЖКА ==========
+        // ---------- ПОДДЕРЖКА ----------
         function sendSupport() {
             let text = document.getElementById('supportText').value.trim();
             if (!text) {
                 tg.showPopup({ title: 'Ошибка', message: 'Напиши сообщение.', buttons: [{ type: 'ok' }] });
                 return;
             }
-            tg.sendData(JSON.stringify({ action: 'support', text: text }));
+            sendToBot({ action: 'support', text });
             document.getElementById('supportText').value = '';
             tg.showPopup({ title: 'Отправлено!', message: 'Администратор ответит в ближайшее время.', buttons: [{ type: 'ok' }] });
             closeSupport();
@@ -652,14 +583,9 @@
                 message: 'Напиши новый пароль (мин. 6 символов)',
                 buttons: [{ type: 'ok' }, { type: 'cancel' }]
             });
-            // TODO: реализовать через бота
         }
 
-        // ========== ОБРАБОТКА ДАННЫХ ОТ БОТА ==========
-        tg.onEvent('mainButtonClicked', function() {});
-        tg.onEvent('popupClosed', function() {});
-
-        // Получение данных от бота
+        // ---------- ОБРАБОТКА ДАННЫХ ОТ БОТА ----------
         window.handleBotData = function(data) {
             try {
                 let parsed = JSON.parse(data);
@@ -690,6 +616,8 @@
                     }
                 } else if (parsed.type === 'ban_update') {
                     renderBanPick(parsed);
+                } else if (parsed.status === 'ok') {
+                    // просто успех
                 } else {
                     console.log('Unknown data:', parsed);
                 }
@@ -698,24 +626,22 @@
             }
         };
 
-        // ========== РЕНДЕР ЛОББИ ==========
+        // ---------- РЕНДЕР ЛОББИ ----------
         function renderLobby(data) {
-            document.getElementById('lobbyTitle').textContent = 'ЛОББИ #' + (data.lobby_id || '?') + ' | ' + (data
-            .platform || 'PC') + ' | ' + (data.count || 0) + '/10';
+            showScreen('lobby');
+            document.getElementById('lobbyTitle').textContent = 'ЛОББИ #' + (data.lobby_id || '?') + ' | ' + (data.platform || 'PC') + ' | ' + (data.count || 0) + '/10';
             let html = '';
             if (data.players && data.players.length) {
                 data.players.forEach(p => {
                     let status = p.ready ? '🟢 ГОТОВ' : '🔴 НЕ ГОТОВ';
                     let statusClass = p.ready ? 'ready-true' : 'ready-false';
-                    html += '<li><span>' + p.username + '</span><span class="ready-status ' + statusClass + '">' +
-                        status + '</span></li>';
+                    html += '<li><span>' + p.username + '</span><span class="' + statusClass + '">' + status + '</span></li>';
                 });
             } else {
                 html = '<li>Нет игроков</li>';
             }
             document.getElementById('lobbyPlayers').innerHTML = html;
 
-            // Хост и карта (если есть)
             let hostInfo = document.getElementById('lobbyHostInfo');
             if (data.host_id) {
                 hostInfo.classList.remove('hidden');
@@ -726,12 +652,10 @@
                 hostInfo.classList.add('hidden');
             }
 
-            // Бан-пики (если есть)
             let banArea = document.getElementById('banPickArea');
             if (data.ban_active) {
                 banArea.classList.remove('hidden');
-                document.getElementById('banTurnInfo').textContent = 'Очередь: ' + (data.current_banner || '@player') +
-                    ' (' + (data.ban_count || 0) + '/6)';
+                document.getElementById('banTurnInfo').textContent = 'Очередь: ' + (data.current_banner || '@player') + ' (' + (data.ban_count || 0) + '/6)';
                 let grid = document.getElementById('mapGrid');
                 grid.innerHTML = '';
                 if (data.maps && data.maps.length) {
@@ -741,7 +665,7 @@
                         btn.textContent = m.emoji + ' ' + m.name;
                         btn.onclick = function() {
                             if (!m.banned) {
-                                tg.sendData(JSON.stringify({ action: 'ban_map', map: m.name }));
+                                sendToBot({ action: 'ban_map', map: m.name });
                             }
                         };
                         grid.appendChild(btn);
@@ -753,15 +677,14 @@
             }
         }
 
-        // ========== РЕНДЕР ТОПА ==========
+        // ---------- РЕНДЕР ТОПА ----------
         function renderTop(data) {
             let list = document.getElementById('topList');
             if (data && data.length) {
                 let html = '';
                 data.forEach((p, i) => {
                     let medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
-                    html += '<li><span class="top-rank">' + medal + '</span><span class="top-name">@' + p
-                        .username + '</span><span class="top-elo">Ур.' + p.level + ' | ' + p.elo + ' Эло</span></li>';
+                    html += '<li><span class="top-rank">' + medal + '</span><span class="top-name">@' + p.username + '</span><span class="top-elo">Ур.' + p.level + ' | ' + p.elo + ' Эло</span></li>';
                 });
                 list.innerHTML = html;
             } else {
@@ -769,15 +692,14 @@
             }
         }
 
-        // ========== РЕНДЕР ИСТОРИИ ==========
+        // ---------- РЕНДЕР ИСТОРИИ ----------
         function renderHistory(data) {
             let list = document.getElementById('historyList');
             if (data && data.length) {
                 let html = '';
                 data.forEach(m => {
                     let result = m.win ? '🟢 ПОБЕДА' : '🔴 ПОРАЖЕНИЕ';
-                    html += '<li>' + result + ' | ' + m.map + ' | ' + m.score + ' | ' + m.elo_change +
-                        ' Эло</li>';
+                    html += '<li>' + result + ' | ' + m.map + ' | ' + m.score + ' | ' + m.elo_change + ' Эло</li>';
                 });
                 list.innerHTML = html;
             } else {
@@ -785,7 +707,7 @@
             }
         }
 
-        // ========== РЕНДЕР БАН-ПИКОВ ==========
+        // ---------- РЕНДЕР БАН-ПИКОВ ----------
         function renderBanPick(data) {
             let grid = document.getElementById('mapGrid');
             if (data.maps && data.maps.length) {
@@ -796,22 +718,26 @@
                     btn.textContent = m.emoji + ' ' + m.name;
                     btn.onclick = function() {
                         if (!m.banned) {
-                            tg.sendData(JSON.stringify({ action: 'ban_map', map: m.name }));
+                            sendToBot({ action: 'ban_map', map: m.name });
                         }
                     };
                     grid.appendChild(btn);
                 });
             }
-            document.getElementById('banTurnInfo').textContent = 'Очередь: ' + (data.current_banner || '@player') +
-                ' (' + (data.ban_count || 0) + '/6)';
+            document.getElementById('banTurnInfo').textContent = 'Очередь: ' + (data.current_banner || '@player') + ' (' + (data.ban_count || 0) + '/6)';
             if (data.finished) {
                 document.getElementById('banBtn').classList.add('hidden');
-                tg.showPopup({ title: 'Бан-пики завершены!', message: 'Играем на карте: ' + data.selected_map,
-                    buttons: [{ type: 'ok' }] });
+                tg.showPopup({ title: 'Бан-пики завершены!', message: 'Играем на карте: ' + data.selected_map, buttons: [{ type: 'ok' }] });
             }
         }
 
-        console.log('Stranger Faceit loaded.');
+        // ---------- ПОЛУЧЕНИЕ ОТВЕТА ОТ БОТА ----------
+        // Bot будет отправлять данные через tg.sendData, но мы их перехватываем здесь
+        // Для этого в bot.py нужно, чтобы ответы приходили в формате JSON и отправлялись через sendData
+        // Но так как у нас бот отвечает через webhook, мы используем handleBotData
+
+        // ---------- ИНИЦИАЛИЗАЦИЯ ----------
+        showStart();
     </script>
 </body>
 </html>
