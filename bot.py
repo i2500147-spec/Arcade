@@ -1,4 +1,4 @@
-import os, json, random, hashlib, time
+import os, json, random, hashlib
 from datetime import datetime
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -24,7 +24,6 @@ dp = Dispatcher()
 app = FastAPI()
 sup = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-# ---------- КАРТЫ ----------
 MAPS = [
     {"name": "SANDSTONE", "emoji": "🏜️"},
     {"name": "RUST", "emoji": "🏗️"},
@@ -34,7 +33,6 @@ MAPS = [
     {"name": "ZONE 7", "emoji": "🌃"}
 ]
 
-# ---------- ХЕЛПЕРЫ ----------
 def get_user(tg_id):
     try:
         r = sup.table("users").select("*").eq("telegram_id", tg_id).execute()
@@ -44,18 +42,19 @@ def get_user(tg_id):
 def create_user(tg_id, username, snick, sid, pwd):
     try:
         sup.table("users").insert({
-            "telegram_id": tg_id, "username": username, "standoff_nick": snick,
-            "standoff_id": sid, "password_hash": hashlib.sha256(pwd.encode()).hexdigest(),
-            "elo": 1000, "matches_played": 0, "wins": 0, "is_calibration": True,
+            "telegram_id": tg_id,
+            "username": username,
+            "standoff_nick": snick,
+            "standoff_id": sid,
+            "password_hash": hashlib.sha256(pwd.encode()).hexdigest(),
+            "elo": 1000,
+            "matches_played": 0,
+            "wins": 0,
+            "is_calibration": True,
             "created_at": datetime.now().isoformat()
         }).execute()
         return True
     except: return False
-
-def calc_elo(score_w, score_l, cal):
-    d = abs(score_w - score_l)
-    base = 15 + d * 2
-    return min(base * (2 if cal else 1), 50)
 
 def get_level(mmr):
     if mmr < 800: return 1
@@ -69,10 +68,8 @@ def get_level(mmr):
     elif mmr < 2500: return 9
     else: return 10
 
-# ---------- ЛОББИ ----------
 lobbies = {}
 
-# ---------- БОТ ----------
 @dp.message(Command("start"))
 async def start(msg: types.Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -80,25 +77,6 @@ async def start(msg: types.Message):
     ])
     await msg.answer("👋 Добро пожаловать в Stranger Faceit!", reply_markup=kb)
 
-@dp.message(Command("admin"))
-async def admin_cmd(msg: types.Message):
-    if msg.from_user.id != OWNER_ID:
-        await msg.answer("⛔ Нет доступа")
-        return
-    await msg.answer("⚙️ Админ-панель\n/lobbies - активные лобби\n/stats - статистика")
-
-@dp.message(Command("lobbies"))
-async def admin_lobbies(msg: types.Message):
-    if msg.from_user.id != OWNER_ID: return
-    if not lobbies:
-        await msg.answer("Нет активных лобби")
-        return
-    text = "📋 Активные лобби:\n"
-    for lid, lb in lobbies.items():
-        text += f"ID: {lid} | {lb['platform']} | {len(lb['players'])}/10 | статус: {lb.get('status', 'waiting')}\n"
-    await msg.answer(text)
-
-# ---------- ВЕБ-СЕРВЕР ----------
 @app.get("/")
 async def web_root():
     with open("web/index.html", "r", encoding="utf-8") as f:
@@ -110,27 +88,33 @@ async def webhook(req: Request):
     tg_id = data.get("telegram_id")
     action = data.get("action")
     user = get_user(tg_id)
+
     if not user and action not in ["register", "login"]:
         return {"status": "error", "message": "Сначала зарегистрируйся"}
-    
+
+    # ---------- РЕГИСТРАЦИЯ ----------
     if action == "register":
         nick = data.get("nick")
         sid = data.get("standoff_id")
         pwd = data.get("password")
         if len(pwd) < 6:
-            return {"status": "error", "message": "Пароль минимум 6 символов"}
+            return {"type": "auth", "success": False, "message": "Пароль минимум 6 символов"}
+        if not sid.isdigit():
+            return {"type": "auth", "success": False, "message": "ID должен состоять только из цифр"}
         if create_user(tg_id, f"user_{tg_id}", nick, sid, pwd):
             return {"type": "auth", "success": True, "message": "Регистрация успешна!", "user": get_user(tg_id)}
-        return {"status": "error", "message": "Ник или ID уже заняты"}
-    
+        return {"type": "auth", "success": False, "message": "Ник или ID уже заняты"}
+
+    # ---------- ВХОД ----------
     if action == "login":
         nick = data.get("nick")
         pwd = data.get("password")
         u = sup.table("users").select("*").eq("standoff_nick", nick).execute()
         if u.data and u.data[0]["password_hash"] == hashlib.sha256(pwd.encode()).hexdigest():
             return {"type": "auth", "success": True, "message": "Вход выполнен!", "user": u.data[0]}
-        return {"status": "error", "message": "Неверный ник или пароль"}
-    
+        return {"type": "auth", "success": False, "message": "Неверный ник или пароль"}
+
+    # ---------- ПОИСК МАТЧА ----------
     if action == "find_match":
         platform = data.get("platform")
         lid = None
@@ -147,7 +131,6 @@ async def webhook(req: Request):
                 "map": None,
                 "bans": [],
                 "ban_count": 0,
-                "turn": 0,
                 "captains": [],
                 "teams": {"ct": [], "t": []},
                 "status": "waiting",
@@ -155,7 +138,8 @@ async def webhook(req: Request):
             }
         lobbies[lid]["players"][tg_id] = {"ready": False, "username": user["username"]}
         return {"type": "lobby_update", "lobby_id": lid, "platform": platform, "count": len(lobbies[lid]["players"]), "players": [{"username": p["username"], "ready": p["ready"]} for p in lobbies[lid]["players"].values()]}
-    
+
+    # ---------- ГОТОВНОСТЬ ----------
     if action == "set_ready":
         for lid, lb in lobbies.items():
             if tg_id in lb["players"]:
@@ -164,23 +148,18 @@ async def webhook(req: Request):
                     players = list(lb["players"].keys())
                     caps = random.sample(players, 2)
                     lb["captains"] = caps
-                    lb["turn"] = 0
                     lb["status"] = "ban_pick"
                     lb["bans"] = []
                     lb["ban_count"] = 0
-                    lb["map"] = None
                     ct_players = random.sample(players, 5)
                     t_players = [p for p in players if p not in ct_players]
                     lb["teams"] = {"ct": ct_players, "t": t_players}
-                    for pid in players:
-                        try:
-                            team = "КТ" if pid in ct_players else "Т"
-                            asyncio.create_task(bot.send_message(pid, f"🔔 МАТЧ НАЧАЛСЯ!\nКарта: БАН-ПИК\nТы в команде {team}"))
-                        except: pass
+                    # НЕ ОТПРАВЛЯЕМ СООБЩЕНИЯ В ЧАТ
                     return {"type": "ban_update", "maps": MAPS, "bans": [], "ban_count": 0, "current_banner": lb["captains"][0], "finished": False}
                 return {"type": "lobby_update", "lobby_id": lid, "platform": lb["platform"], "count": len(lb["players"]), "players": [{"username": p["username"], "ready": p["ready"]} for p in lb["players"].values()]}
         return {"status": "error", "message": "Ты не в лобби"}
-    
+
+    # ---------- БАН КАРТЫ ----------
     if action == "ban_map":
         map_name = data.get("map")
         for lid, lb in lobbies.items():
@@ -201,16 +180,12 @@ async def webhook(req: Request):
                     lb["host_id"] = lb["captains"][0]
                     host_data = get_user(lb["host_id"])
                     host_id_in_game = host_data["standoff_id"] if host_data else "123456"
-                    for pid in lb["players"]:
-                        try:
-                            team = "КТ" if pid in lb["teams"]["ct"] else "Т"
-                            asyncio.create_task(bot.send_message(pid, f"✅ БАН-ПИКИ ЗАВЕРШЕНЫ!\nКарта: {lb['map']}\nТы в команде {team}\nID ХОСТА: {host_id_in_game}\nХост: @{lb['players'][lb['host_id']]['username']}"))
-                        except: pass
-                    return {"type": "ban_update", "finished": True, "selected_map": lb["map"], "maps": MAPS, "bans": lb["bans"]}
+                    return {"type": "ban_update", "finished": True, "selected_map": lb["map"], "maps": MAPS, "bans": lb["bans"], "host_id": host_id_in_game, "host_name": lb["players"][lb["host_id"]]["username"]}
                 next_cap = lb["captains"][lb["ban_count"] % 2]
                 return {"type": "ban_update", "maps": MAPS, "bans": lb["bans"], "ban_count": lb["ban_count"], "current_banner": next_cap, "finished": False}
         return {"status": "error", "message": "Ошибка бан-пиков"}
-    
+
+    # ---------- ВЫХОД ----------
     if action == "leave_lobby":
         for lid, lb in lobbies.items():
             if tg_id in lb["players"]:
@@ -219,12 +194,14 @@ async def webhook(req: Request):
                     del lobbies[lid]
                 return {"status": "ok", "message": "Ты вышел из лобби"}
         return {"status": "error", "message": "Ты не в лобби"}
-    
+
+    # ---------- ТОП ----------
     if action == "get_top":
         r = sup.table("users").select("*").order("elo", desc=True).limit(100).execute()
         data = [{"username": u["username"], "elo": u["elo"], "level": get_level(u["elo"])} for u in r.data]
         return {"type": "top_update", "data": data}
-    
+
+    # ---------- ИСТОРИЯ ----------
     if action == "get_history":
         r = sup.table("matches").select("*").eq("telegram_id", tg_id).order("created_at", desc=True).limit(20).execute()
         data = []
@@ -236,7 +213,8 @@ async def webhook(req: Request):
                 "elo_change": m.get("elo_change", 0)
             })
         return {"type": "history_update", "data": data}
-    
+
+    # ---------- ПРОМОКОДЫ ----------
     if action == "activate_promo":
         code = data.get("code")
         r = sup.table("promo_codes").select("*").eq("code", code).execute()
@@ -252,15 +230,17 @@ async def webhook(req: Request):
         new_elo = user["elo"] + promo["reward_elo"]
         sup.table("users").update({"elo": new_elo}).eq("telegram_id", tg_id).execute()
         return {"type": "promo_result", "success": True, "message": f"+{promo['reward_elo']} Эло!", "code": code, "reward": promo["reward_elo"]}
-    
+
+    # ---------- ПОДДЕРЖКА (ЕДИНСТВЕННОЕ СООБЩЕНИЕ В ЧАТ) ----------
     if action == "support":
         text = data.get("text")
-        asyncio.create_task(bot.send_message(ADMIN_CHAT_ID, f"🆕 ЗАЯВКА В ПОДДЕРЖКУ\nОт: @{user['username']} (ID: {tg_id})\nТекст: {text}"))
+        user_data = get_user(tg_id)
+        await bot.send_message(ADMIN_CHAT_ID, f"🆕 ЗАЯВКА В ПОДДЕРЖКУ\nОт: @{user_data['username']} (ID: {tg_id})\nТекст: {text}")
+        await bot.send_message(tg_id, "✅ Ваше обращение отправлено. Администратор ответит в ближайшее время.")
         return {"status": "ok", "message": "Отправлено!"}
-    
+
     return {"status": "ok"}
 
-# ---------- ЗАПУСК ----------
 def run_web():
     uvicorn.run(app, host="0.0.0.0", port=8080)
 
@@ -268,10 +248,7 @@ async def run_bot():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    # Запускаем веб-сервер в отдельном потоке (он не использует сигналы)
     web_thread = threading.Thread(target=run_web)
     web_thread.daemon = True
     web_thread.start()
-    
-    # Бота запускаем в основном потоке (чтобы сигналы работали)
     asyncio.run(run_bot())
